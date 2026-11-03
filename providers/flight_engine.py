@@ -88,6 +88,58 @@ _DS1_RE = re.compile(
     re.DOTALL,
 )
 
+_DS1_START_RE = re.compile(r"AF_initDataCallback\(\{key:\s*'ds:1'.*?data:", re.DOTALL)
+_JSON_DECODER = json.JSONDecoder()
+
+
+def _extract_ds1_payloads(text: str) -> list:
+    """
+    Devuelve los bloques JSON de 'ds:1' de la página de Google Flights.
+    Usa raw_decode para leer solo el primer valor JSON completo (evita el error
+    'Extra data' cuando después vienen más campos o fragmentos) y tolera el
+    prefijo anti-XSSI )]}' y respuestas por fragmentos.
+    """
+    payloads = []
+    if not text:
+        return payloads
+    for m in _DS1_START_RE.finditer(text):
+        pos = m.end()
+        while pos < len(text) and text[pos] in " \t\r\n":
+            pos += 1
+        try:
+            value, _ = _JSON_DECODER.raw_decode(text, pos)
+            payloads.append(value)
+        except ValueError:
+            continue
+    if not payloads:
+        stripped = text.lstrip()
+        if stripped.startswith(")]}'"):
+            stripped = stripped[4:]
+        idx = 0
+        while idx < len(stripped):
+            while idx < len(stripped) and stripped[idx] in " \t\r\n,":
+                idx += 1
+            if idx >= len(stripped) or stripped[idx] not in "[{":
+                # Fragmentos con longitud al inicio (formato por bloques)
+                nl = stripped.find("\n", idx)
+                if nl == -1:
+                    break
+                idx = nl + 1
+                continue
+            try:
+                value, idx = _JSON_DECODER.raw_decode(stripped, idx)
+                if isinstance(value, list):
+                    payloads.append(value)
+            except ValueError:
+                break
+    return payloads
+
+
+def _safe_snippet(text: str, limit: int = 120) -> str:
+    snippet = re.sub(r"\s+", " ", (text or "")[:limit])
+    return re.sub(r"[^\x20-\x7E]", "?", snippet)
+
+
 _HTTP_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -462,22 +514,43 @@ def fetch_live_google_flights(
     tfs = build_google_flights_tfs(orig, dest, flight_date)
     url = f"https://www.google.com/travel/flights?tfs={tfs}&hl=es-419&gl=CO&curr=COP"
 
+    session = requests.Session()
+    session.trust_env = True  # respeta HTTP(S)_PROXY (proxy de PythonAnywhere gratis)
     for attempt in range(2):
+        resp = None
         try:
-            resp = requests.get(url, headers=_HTTP_HEADERS, timeout=timeout)
+            resp = session.get(url, headers=_HTTP_HEADERS, timeout=timeout)
             if resp.status_code != 200:
+                _log.warning(
+                    "Google Flights HTTP %s (%s-%s %s) tipo=%s inicio=%s",
+                    resp.status_code, orig, dest, flight_date,
+                    resp.headers.get("Content-Type", ""), _safe_snippet(resp.text),
+                )
                 continue
-            match = _DS1_RE.search(resp.text)
-            if not match:
-                continue
-            data = json.loads(match.group(1))
-            flights = _parse_google_flights_ds1(data, flight_date)
+            flights = []
+            payloads = _extract_ds1_payloads(resp.text)
+            for data in payloads:
+                try:
+                    flights = _parse_google_flights_ds1(data, flight_date)
+                except Exception:
+                    flights = []
+                if flights:
+                    break
             if flights:
                 with _CACHE_LOCK:
                     _LIVE_CACHE[cache_key] = (time.time(), flights)
                 return [dict(item) for item in flights]
+            _log.warning(
+                "Google Flights sin datos legibles (%s-%s %s) bloques=%d tipo=%s url_final=%s inicio=%s",
+                orig, dest, flight_date, len(payloads), resp.headers.get("Content-Type", ""),
+                _safe_snippet(resp.url, 60), _safe_snippet(resp.text),
+            )
         except Exception as exc:
-            _log.warning("Google Flights falló (%s-%s %s): %s", orig, dest, flight_date, exc)
+            _log.warning(
+                "Google Flights falló (%s-%s %s): %s: %s estado=%s",
+                orig, dest, flight_date, type(exc).__name__, exc,
+                getattr(resp, "status_code", "-"),
+            )
             if attempt == 0:
                 time.sleep(0.25)
 

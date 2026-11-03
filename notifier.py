@@ -2,6 +2,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import html
 import smtplib
+import sys
 
 import config
 from database import create_alert
@@ -146,6 +147,11 @@ def send_smtp_email(to_email: str, subject: str, plain_text: str, html_body: str
 
     placeholders = {"", "tu_correo@gmail.com", "xxxx_xxxx_xxxx_xxxx", "xxxxxxxxxxxxxxxx"}
     if not smtp_enabled or smtp_user in placeholders or smtp_pass in placeholders:
+        print(
+            f"[SMTP] Envío omitido: SMTP desactivado o sin usuario/contraseña configurados "
+            f"(habilitado={smtp_enabled}, usuario_configurado={smtp_user not in placeholders}).",
+            file=sys.stderr, flush=True,
+        )
         return False
 
     try:
@@ -158,11 +164,11 @@ def send_smtp_email(to_email: str, subject: str, plain_text: str, html_body: str
         msg.attach(MIMEText(html_body, "html", "utf-8"))
 
         if int(config.SMTP_PORT) == 465:
-            with smtplib.SMTP_SSL(config.SMTP_HOST, int(config.SMTP_PORT), timeout=12) as server:
+            with smtplib.SMTP_SSL(config.SMTP_HOST, int(config.SMTP_PORT), timeout=int(os.environ.get("VUELOS_SMTP_TIMEOUT", "15") or 15)) as server:
                 server.login(smtp_user, smtp_pass)
                 server.sendmail(smtp_user, [to_email], msg.as_string())
         else:
-            with smtplib.SMTP(config.SMTP_HOST, int(config.SMTP_PORT), timeout=12) as server:
+            with smtplib.SMTP(config.SMTP_HOST, int(config.SMTP_PORT), timeout=int(os.environ.get("VUELOS_SMTP_TIMEOUT", "15") or 15)) as server:
                 server.ehlo()
                 if getattr(config, "SMTP_USE_TLS", True):
                     server.starttls()
@@ -170,7 +176,13 @@ def send_smtp_email(to_email: str, subject: str, plain_text: str, html_body: str
                 server.login(smtp_user, smtp_pass)
                 server.sendmail(smtp_user, [to_email], msg.as_string())
         return True
-    except Exception:
+    except Exception as exc:
+        detail = str(exc).replace(smtp_pass, "***") if smtp_pass else str(exc)
+        print(
+            f"[SMTP] Falló el envío a {to_email} vía {config.SMTP_HOST}:{config.SMTP_PORT} "
+            f"como {smtp_user}: {type(exc).__name__}: {detail[:300]}",
+            file=sys.stderr, flush=True,
+        )
         return False
 
 
