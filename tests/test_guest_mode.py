@@ -41,6 +41,7 @@ class GuestModeTest(unittest.TestCase):
     def setUp(self):
         init_db(config.DB_PATH)
         app_module.rate_limiter.reset()
+        app_module.search_jobs.reset()
         self.client = app_module.app.test_client()
         with self.client.session_transaction() as s:
             s["_csrf_token"] = TOKEN

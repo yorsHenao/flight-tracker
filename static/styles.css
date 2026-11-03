@@ -1749,3 +1749,22 @@ html[data-theme="dark"] .d-tab-badge, html[data-theme="dark"] .mini-green-chip, 
   .gx-grid { grid-template-columns:1fr; }
   .gx-banner { flex-direction:column; align-items:stretch; text-align:center; }
 }
+
+/* Carga de búsqueda: avión en arco punteado (opción B) */
+.ld-ov{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:200;background:rgba(243,246,250,.82);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.ld-ov[hidden]{display:none}
+html[data-theme="dark"] .ld-ov{background:rgba(10,15,22,.82)}
+.ld-box{text-align:center;padding:36px 40px;border-radius:24px;background:var(--bg-card);box-shadow:0 20px 60px rgba(2,132,199,.15);max-width:400px;width:calc(100% - 48px);box-sizing:border-box;color:var(--text-primary)}
+.ld-route{display:flex;align-items:center;gap:10px;font-weight:600;font-size:22px;letter-spacing:.02em;color:var(--accent-primary)}
+.ld-route>div[data-ld]{min-width:3ch}
+.ld-wrap{position:relative;flex:1;height:70px}
+.ld-arc{position:absolute;inset:0;width:100%;height:70px;overflow:visible}
+.ld-plane{position:absolute;top:0;left:0;width:20px;height:20px;offset-path:path("M4 60 Q130 -20 256 60");offset-rotate:auto;animation:ld-fly 2.8s ease-in-out infinite}
+@keyframes ld-fly{from{offset-distance:0%}to{offset-distance:100%}}
+@media (prefers-reduced-motion:reduce){.ld-plane{animation:none;offset-distance:50%}}
+.ld-title{font-size:19px;font-weight:600;margin:16px 0 6px;letter-spacing:-.01em}
+.ld-text{color:var(--text-secondary,#64748B);font-size:14px;margin:0}
+.ld-steps{display:flex;gap:6px;justify-content:center;margin-top:18px}
+.ld-dot{width:28px;height:4px;border-radius:2px;background:#E0EAF4}
+html[data-theme="dark"] .ld-dot{background:#243244}
+.ld-dot.on{background:var(--accent-primary)}

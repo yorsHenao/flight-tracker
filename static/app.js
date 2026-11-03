@@ -377,3 +377,58 @@
         setTimeout(function () { set(i); el.classList.remove("is-out"); }, 450);
       }, 5000);
     })();
+
+// Carga de búsqueda (avión): se muestra al buscar y consulta el estado cada 2 s
+(function () {
+  var ov = document.getElementById("search-loader");
+  if (!ov) return;
+  var LABELS = ["Preparando la búsqueda", "Comparando aerolíneas", "Revisando el mes completo"];
+  var step = 1, ahead = 0, started = Date.now();
+  function render() {
+    var txt = "Paso " + step + " de 3 · " + LABELS[step - 1];
+    if (ahead > 0) txt = ahead === 1 ? "Hay 1 búsqueda antes de la tuya" : "Hay " + ahead + " búsquedas antes de la tuya";
+    ov.querySelector('[data-ld="text"]').textContent = txt;
+    ov.querySelectorAll(".ld-dot").forEach(function (d, i) { d.classList.toggle("on", i < step); });
+  }
+  function setStep(n) { if (n > step) { step = Math.min(n, 3); render(); } }
+  function iata(v) { var m = /\(([A-Z]{3})\)\s*$/.exec(v || ""); return m ? m[1] : ""; }
+  // Temporizador: avanza el paso aunque el servidor tarde en responder
+  function tick() {
+    var s = (Date.now() - started) / 1000;
+    if (s > 3) setStep(2);
+    if (s > 12) setStep(3);
+  }
+  function show(o, d) {
+    if (o) ov.querySelector('[data-ld="o"]').textContent = o;
+    if (d) ov.querySelector('[data-ld="d"]').textContent = d;
+    ov.hidden = false; started = Date.now(); render();
+    setInterval(tick, 1000);
+  }
+  var form = document.getElementById("create-search-form");
+  if (form) form.addEventListener("submit", function () {
+    var o = form.querySelector('[name="origin"]'), d = form.querySelector('[name="destination"]');
+    show(iata(o && o.value), iata(d && d.value));
+  });
+  var url = ov.getAttribute("data-status-url");
+  if (!url) return;
+  step = parseInt(ov.getAttribute("data-step") || "1", 10) || 1;
+  show("", "");
+  var fails = 0;
+  function poll() {
+    fetch(url, { headers: { "Accept": "application/json" }, credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        fails = 0; ahead = j.ahead || 0;
+        if (j.step) setStep(j.step);
+        render();
+        if (j.status === "done" || j.status === "error" || j.status === "unknown") {
+          window.location.replace(window.location.pathname + "#vista-previa");
+          window.location.reload();
+          return;
+        }
+        setTimeout(poll, 2000);
+      })
+      .catch(function () { if (++fails < 10) setTimeout(poll, 2000); else window.location.reload(); });
+  }
+  setTimeout(poll, 2000);
+})();

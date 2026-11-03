@@ -16,6 +16,7 @@ from flask import (
 )
 
 import config
+import search_jobs
 from database import (
     init_db,
     find_duplicate_search,
@@ -271,17 +272,14 @@ def _location_lists():
 
 def _guest_dashboard():
     """Página de búsqueda para invitados: sin rutas, sin avisos, nada se guarda en la base de datos."""
-    preview = None
-    if session.get("guest_preview"):
-        preview = _build_preview(session["guest_preview"])
-        if preview is None:
-            session.pop("guest_preview", None)
+    preview, pending_job = _resolve_preview("guest_preview")
     suggestions, all_locations = _location_lists()
     return render_template(
         "index.html",
         user=None,
         is_admin=False,
         preview=preview,
+        pending_job=pending_job,
         searches=[],
         alerts=[],
         active_count=0,
@@ -326,17 +324,14 @@ def dashboard():
     default_date_iso = default_dt.strftime("%Y-%m-%d")
     default_month = default_dt.strftime("%Y-%m")
 
-    preview = None
-    if session.get("search_preview"):
-        preview = _build_preview(session["search_preview"])
-        if preview is None:
-            session.pop("search_preview", None)
+    preview, pending_job = _resolve_preview("search_preview")
 
     return render_template(
         "index.html",
         user=user,
         is_admin=_is_admin(),
         preview=preview,
+        pending_job=pending_job,
         searches=searches,
         alerts=alerts,
         active_count=active_count,
@@ -376,13 +371,15 @@ def _validate_search_input(data, guest: bool = False) -> dict:
             "target_price": target_price}
 
 
-def _build_preview(p: dict) -> dict | None:
+def _build_preview(p: dict, set_step=None) -> dict | None:
     """Consulta precios para la vista previa, sin guardar nada ni enviar correos."""
     try:
         date_offers = search_flights_for_date(
             origin_input=p["origin_label"], destination_input=p["destination_label"],
             flight_date=p["travel_date"], stop_filter=p["stop_filter"], jitter_seed="preview",
         )
+        if set_step:
+            set_step(3)
         monthly = generate_monthly_calendar_offers(
             origin_input=p["origin_label"], destination_input=p["destination_label"],
             travel_month=p["travel_month"], stop_filter=p["stop_filter"], jitter_seed="preview",
@@ -393,6 +390,67 @@ def _build_preview(p: dict) -> dict | None:
     cheapest_day = min(monthly, key=lambda o: o["price"]) if monthly else None
     return dict(p, offers=date_offers[:MAX_PRICE_CARDS], total=len(date_offers),
                 best=date_offers[0] if date_offers else None, cheapest_day=cheapest_day)
+
+
+# Espera corta dentro de la petición: si el resultado está listo (caché) se muestra
+# directo; si no, se muestra el avión de carga y el navegador consulta el estado.
+PREVIEW_INLINE_WAIT = 1.5
+
+
+def _start_preview_job(p: dict) -> str | None:
+    key = search_jobs.cache_key(p)
+    if search_jobs.get_cached(key) is not None:
+        return None
+    params = dict(p)
+
+    def run(set_step):
+        return _build_preview(params, set_step) or {"invalid": True}
+
+    return search_jobs.submit(key, run)
+
+
+def _resolve_preview(session_key: str):
+    """Devuelve (preview, pending_job). Nunca bloquea más de PREVIEW_INLINE_WAIT segundos."""
+    p = session.get(session_key)
+    if not p:
+        return None, None
+    key = search_jobs.cache_key(p)
+    cached = search_jobs.get_cached(key)
+    if cached is None:
+        try:
+            jid = _start_preview_job(p)
+        except search_jobs.QueueFull:
+            flash("Hay muchas búsquedas en curso. Intenta en un minuto.", "error")
+            session.pop(session_key, None)
+            return None, None
+        if jid:
+            session["preview_job"] = jid
+            search_jobs.wait(jid, PREVIEW_INLINE_WAIT)
+        cached = search_jobs.get_cached(key)
+        if cached is None:
+            st = search_jobs.status(jid) if jid else None
+            if st and st["status"] == "error":
+                flash("No pudimos consultar los precios. Intenta de nuevo.", "error")
+                session.pop(session_key, None)
+                return None, None
+            return None, {"id": jid, "origin_iata": p.get("origin_iata", ""),
+                          "destination_iata": p.get("destination_iata", ""),
+                          "step": (st or {}).get("step", 1)}
+    if cached.get("invalid"):
+        session.pop(session_key, None)
+        return None, None
+    return dict(cached, **{k: v for k, v in p.items() if k in ("tracking_days", "target_price")}), None
+
+
+@app.route("/searches/jobs/<job_id>", methods=["GET"])
+def preview_job_status(job_id: str):
+    """Estado de una búsqueda en segundo plano (el navegador pregunta cada 2 s)."""
+    if session.get("preview_job") != job_id:
+        return jsonify({"status": "unknown"}), 404
+    st = search_jobs.status(job_id)
+    if not st:
+        return jsonify({"status": "unknown"}), 404
+    return jsonify({"status": st["status"], "step": st["step"], "ahead": st["ahead"]})
 
 
 @app.route("/searches/preview", methods=["POST"])
@@ -417,7 +475,7 @@ def preview_search():
         "stop_filter": v["stop_filter"], "tracking_days": v["tracking_days"],
         "target_price": v["target_price"],
     }
-    return redirect(url_for("dashboard") + "#vista-previa")
+    return _after_preview_submit("search_preview")
 
 
 def _guest_preview_search(client_ip: str):
@@ -438,6 +496,26 @@ def _guest_preview_search(client_ip: str):
         "travel_date": v["travel_date"], "travel_month": v["travel_month"],
         "stop_filter": v["stop_filter"],
     }
+    return _after_preview_submit("guest_preview")
+
+
+def _after_preview_submit(session_key: str):
+    """Lanza la búsqueda en segundo plano y responde de inmediato."""
+    p = session[session_key]
+    try:
+        jid = _start_preview_job(p)
+    except search_jobs.QueueFull as exc:
+        session.pop(session_key, None)
+        if _wants_json():
+            return jsonify({"ok": False, "error": str(exc)}), 503
+        flash(str(exc), "error")
+        return redirect(url_for("dashboard"))
+    if jid:
+        session["preview_job"] = jid
+    if _wants_json():
+        return jsonify({"ok": True, "job_id": jid,
+                        "status_url": url_for("preview_job_status", job_id=jid) if jid else None,
+                        "redirect": url_for("dashboard") + "#vista-previa"})
     return redirect(url_for("dashboard") + "#vista-previa")
 
 

@@ -73,10 +73,33 @@ PORTALS = [
 
 _PORTAL_BY_ID = {p["id"]: p for p in PORTALS}
 
-# Caché en memoria (TTL 15 minutos) para tareas de fondo
+# Caché en memoria (TTL 30 minutos) por ruta + fecha
 _LIVE_CACHE: dict[tuple[str, str, str], tuple[float, list[dict]]] = {}
 _CACHE_LOCK = threading.Lock()
-_CACHE_TTL_SECONDS = 900.0
+_CACHE_TTL_SECONDS = 1800.0
+# Respuestas vacías o fallidas se recuerdan poco tiempo para no martillar a Google
+_EMPTY_TTL_SECONDS = 300.0
+GOOGLE_TIMEOUT_SECONDS = 8.0
+MONTH_WORKERS = 4
+MONTH_DEADLINE_SECONDS = 25.0
+
+
+class GoogleBreaker:
+    """Corte temprano: tras `limit` fallos de red (SSL EOF, timeout...) deja de consultar."""
+
+    def __init__(self, limit: int = 3, deadline: float | None = None):
+        self.limit = limit
+        self.failures = 0
+        self.deadline = (time.time() + deadline) if deadline else None
+        self._lock = threading.Lock()
+
+    def fail(self):
+        with self._lock:
+            self.failures += 1
+
+    @property
+    def tripped(self) -> bool:
+        return self.failures >= self.limit or (self.deadline is not None and time.time() > self.deadline)
 
 _DS1_RE = re.compile(
     r"AF_initDataCallback\(\{key:\s*'ds:1'.*?data:(.*?), sideChannel:",
@@ -453,8 +476,9 @@ def fetch_live_google_flights(
     orig_iata: str,
     dest_iata: str,
     flight_date: str,
-    timeout: float = 7.0,
+    timeout: float = GOOGLE_TIMEOUT_SECONDS,
     bypass_cache: bool = False,
+    breaker: "GoogleBreaker | None" = None,
 ) -> list[dict]:
     orig = orig_iata.upper()
     dest = dest_iata.upper()
@@ -464,8 +488,12 @@ def fetch_live_google_flights(
     if not bypass_cache:
         with _CACHE_LOCK:
             cached = _LIVE_CACHE.get(cache_key)
-            if cached and (now_ts - cached[0]) < _CACHE_TTL_SECONDS:
-                return [dict(item) for item in cached[1]]
+            if cached:
+                ttl = _CACHE_TTL_SECONDS if cached[1] else _EMPTY_TTL_SECONDS
+                if (now_ts - cached[0]) < ttl:
+                    return [dict(item) for item in cached[1]]
+    if breaker is not None and breaker.tripped:
+        return []
 
     try:
         target_dt = datetime.strptime(flight_date, "%Y-%m-%d").date()
@@ -486,7 +514,10 @@ def fetch_live_google_flights(
 
     session = requests.Session()
     session.trust_env = True  # respeta HTTP(S)_PROXY (proxy de PythonAnywhere gratis)
+    network_errors = 0
     for attempt, url in enumerate(urls):
+        if breaker is not None and breaker.tripped:
+            break
         resp = None
         try:
             resp = session.get(url, headers=_HTTP_HEADERS, timeout=timeout)
@@ -521,9 +552,18 @@ def fetch_live_google_flights(
                 orig, dest, flight_date, type(exc).__name__, exc,
                 getattr(resp, "status_code", "-"),
             )
+            if isinstance(exc, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)):
+                # Incluye SSLError (EOF): la red no responde, no sirve probar más variantes
+                network_errors += 1
+                if breaker is not None:
+                    breaker.fail()
+                if network_errors >= 2:
+                    break
         if attempt < len(urls) - 1:
             time.sleep(0.3)
 
+    with _CACHE_LOCK:
+        _LIVE_CACHE[cache_key] = (time.time(), [])
     return []
 
 
@@ -713,6 +753,7 @@ def search_flights_for_date(
     jitter_seed: str = "",
     attempt_live: bool = True,
     bypass_cache: bool = False,
+    breaker: "GoogleBreaker | None" = None,
 ) -> list[dict]:
     orig_info = resolve_location(origin_input)
     dest_info = resolve_location(destination_input)
@@ -722,7 +763,8 @@ def search_flights_for_date(
     offers: list[dict] = []
 
     if attempt_live:
-        live_flights = fetch_live_google_flights(orig_iata, dest_iata, flight_date, bypass_cache=bypass_cache)
+        live_flights = fetch_live_google_flights(orig_iata, dest_iata, flight_date, bypass_cache=bypass_cache,
+                                                breaker=breaker)
         if live_flights:
             offers = _build_offers_from_live_flights(live_flights, orig_info, dest_info, flight_date)
 
@@ -869,12 +911,16 @@ def generate_monthly_calendar_offers(
         if dt_obj >= today_dt:
             days_to_query.append((day, dt_obj, f"{year:04d}-{month:02d}-{day:02d}"))
 
+    # Corte temprano compartido: si Google falla seguido o se acaba el tiempo,
+    # se devuelve lo que ya haya en caché en vez de seguir esperando.
+    breaker = GoogleBreaker(limit=3, deadline=MONTH_DEADLINE_SECONDS)
     if attempt_live and days_to_query:
         def _warm_day(item):
             _, _, f_date = item
-            fetch_live_google_flights(orig_iata, dest_iata, f_date, timeout=6.5)
+            if not breaker.tripped:
+                fetch_live_google_flights(orig_iata, dest_iata, f_date, breaker=breaker)
 
-        with ThreadPoolExecutor(max_workers=10) as executor:
+        with ThreadPoolExecutor(max_workers=MONTH_WORKERS) as executor:
             list(executor.map(_warm_day, days_to_query))
 
     monthly_best = []
@@ -886,6 +932,7 @@ def generate_monthly_calendar_offers(
             stop_filter=stop_filter,
             jitter_seed=jitter_seed,
             attempt_live=attempt_live,
+            breaker=breaker,
         )
         if not day_offers:
             continue

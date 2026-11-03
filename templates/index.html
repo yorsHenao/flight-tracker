@@ -727,6 +727,22 @@
   </nav>
   {% endif %}
 
+  <div class="ld-ov" id="search-loader" role="status" aria-live="polite"{% if pending_job %} data-job="{{ pending_job.id }}" data-status-url="{{ url_for('preview_job_status', job_id=pending_job.id) }}" data-step="{{ pending_job.step }}"{% else %} hidden{% endif %}>
+    <div class="ld-box">
+      <div class="ld-route">
+        <div data-ld="o">{{ pending_job.origin_iata if pending_job else '' }}</div>
+        <div class="ld-wrap">
+          <svg class="ld-arc" viewBox="0 0 260 70" preserveAspectRatio="none" aria-hidden="true"><path d="M4 60 Q130 -20 256 60" fill="none" stroke="#7DB9E0" stroke-width="2" stroke-dasharray="2 6" stroke-linecap="round"/><circle cx="4" cy="60" r="4" fill="currentColor"/><circle cx="256" cy="60" r="4" fill="currentColor"/></svg>
+          <svg class="ld-plane" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" transform="rotate(90 12 12)"/></svg>
+        </div>
+        <div data-ld="d">{{ pending_job.destination_iata if pending_job else '' }}</div>
+      </div>
+      <h2 class="ld-title">Buscando los vuelos más baratos</h2>
+      <p class="ld-text" data-ld="text">Paso 1 de 3 · Preparando la búsqueda</p>
+      <div class="ld-steps" aria-hidden="true"><span class="ld-dot on"></span><span class="ld-dot"></span><span class="ld-dot"></span></div>
+    </div>
+  </div>
+
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
