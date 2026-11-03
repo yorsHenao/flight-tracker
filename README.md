@@ -99,7 +99,7 @@ Nunca subas el archivo `.env` al repositorio; ya está en `.gitignore`.
 
 ## Despliegue en PythonAnywhere
 
-Resumen: sube el código, crea el `.env` con tus valores, configura la Web app apuntando a `wsgi.py`, instala las dependencias y programa `scheduler_task.py` en la pestaña Tasks. HTTPS se activa solo. La guía paso a paso está en [README_PYTHONANYWHERE.md](README_PYTHONANYWHERE.md).
+Resumen: sube el código, crea el `.env` con tus valores, configura la Web app apuntando a `wsgi.py`, instala las dependencias y programa la revisión de precios (pestaña Tasks o, en cuentas gratuitas, cron-job.org llamando a `/tareas/revisar`). HTTPS se activa solo. La guía paso a paso está en [README_PYTHONANYWHERE.md](README_PYTHONANYWHERE.md).
 
 ## Tarea programada
 
@@ -108,6 +108,8 @@ Resumen: sube el código, crea el `.env` con tus valores, configura la Web app a
 ```bash
 python scheduler_task.py
 ```
+
+También se puede disparar por HTTP en `/tareas/revisar` con la cabecera `X-Cron-Token` (variable `VUELOS_CRON_TOKEN`); sin token válido responde 404. Ambas formas comparten la misma función, usan un candado para no correr dos veces a la vez y tienen un tiempo máximo por llamada.
 
 Una ruta con error no detiene a las demás, y una segunda corrida sin cambios de precio no reenvía correos.
 

@@ -115,3 +115,8 @@ def validate_required_settings() -> None:
         import logging
         logging.getLogger("vuelos").error(msg)
         raise RuntimeError(msg)
+
+# Token para disparar la revisión de precios desde un servicio externo (cron-job.org).
+# Vacío = la ruta /tareas/revisar queda desactivada (responde 404).
+CRON_TOKEN = os.environ.get("VUELOS_CRON_TOKEN", "").strip()
+CRON_TIME_BUDGET_SECONDS = int(os.environ.get("VUELOS_CRON_TIME_BUDGET", "240") or 240)

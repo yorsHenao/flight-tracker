@@ -695,6 +695,28 @@ def stop_from_email_link(stop_token: str):
     return render_template("stop_confirm.html", search=stopped_search, error=None)
 
 
+@app.route("/tareas/revisar", methods=["GET", "POST"])
+def cron_check_all():
+    """Revisión de precios disparada por cron-job.org. Sin token válido responde 404."""
+    if not rate_limiter.is_allowed(f"cron_ip:{get_client_ip()}", max_requests=30, window_seconds=600):
+        abort(404)
+    expected = config.CRON_TOKEN
+    provided = request.headers.get("X-Cron-Token", "") or request.args.get("token", "")
+    if not expected or len(expected) < 24 or not provided or not hmac.compare_digest(
+        provided.encode("utf-8"), expected.encode("utf-8")
+    ):
+        abort(404)
+    if not rate_limiter.is_allowed("cron_check_all", max_requests=6, window_seconds=600):
+        return jsonify({"ok": False, "error": "rate_limited"}), 429
+    result = run_all_active_searches(time_budget=config.CRON_TIME_BUDGET_SECONDS)
+    resp = jsonify({k: result.get(k) for k in (
+        "ok", "skipped_running", "checked_count", "failed_count",
+        "expired_count", "alerts_triggered", "pending_count", "elapsed_seconds",
+    )})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 @app.route("/favicon.ico")
 def favicon():
     return redirect(url_for("static", filename="logo.svg"), code=301)

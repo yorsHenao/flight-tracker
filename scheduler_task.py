@@ -6,6 +6,8 @@ Se puede ejecutar directamente en la pestaña 'Tasks' de PythonAnywhere:
 O ser invocado internamente por la aplicación Flask.
 """
 import logging
+import os
+import time
 from datetime import datetime
 
 import config
@@ -121,42 +123,100 @@ def run_check_for_search(
     }
 
 
-def run_all_active_searches(db_path: str | None = None) -> dict:
-    """
-    Recorre todas las búsquedas activas de todos los usuarios,
-    finaliza automáticamente las que cumplieron su límite de días,
-    y actualiza precios y alertas de las vigentes.
-    """
-    init_db(db_path)
-    expired_count = expire_due_searches(db_path)
-    active_list = get_active_searches_all_users(db_path)
+LOCK_STALE_SECONDS = 900  # un candado más viejo que esto se considera abandonado
+DEFAULT_TIME_BUDGET_SECONDS = 240  # margen bajo el límite de ~300 s de PythonAnywhere
 
-    checked_count = 0
-    alerts_triggered = 0
 
-    for s in active_list:
+def _lock_path(db_path: str | None) -> str:
+    return (db_path or config.DB_PATH) + ".revision.lock"
+
+
+def _acquire_lock(path: str) -> bool:
+    """Candado por archivo (funciona en Linux y Windows). Evita revisiones simultáneas."""
+    for _ in range(2):
         try:
-            res = run_check_for_search(s["id"], db_path=db_path)
-        except Exception as exc:  # una ruta con datos dañados no debe frenar las demás
-            print(f"Ruta {s['id']} omitida por error: {exc}")
-            continue
-        if res:
-            checked_count += 1
-            if res.get("alert_created"):
-                alerts_triggered += 1
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, str(time.time()).encode())
+            os.close(fd)
+            return True
+        except FileExistsError:
+            try:
+                if time.time() - os.path.getmtime(path) > LOCK_STALE_SECONDS:
+                    os.remove(path)
+                    continue
+            except OSError:
+                continue
+            return False
+    return False
 
-    return {
-        "checked_count": checked_count,
-        "expired_count": expired_count,
-        "alerts_triggered": alerts_triggered,
+
+def _release_lock(path: str) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def run_all_active_searches(db_path: str | None = None, time_budget: float | None = None) -> dict:
+    """
+    Recorre las búsquedas activas de todos los usuarios, finaliza las que cumplieron
+    su límite de días y actualiza precios y alertas de las vigentes.
+
+    Las rutas se procesan de la menos reciente a la más reciente; si se agota
+    time_budget (segundos) se detiene y las pendientes quedan para la siguiente
+    llamada. Un candado impide que dos revisiones corran al mismo tiempo.
+    """
+    started = time.monotonic()
+    result = {
+        "ok": True,
+        "skipped_running": False,
+        "checked_count": 0,
+        "failed_count": 0,
+        "expired_count": 0,
+        "alerts_triggered": 0,
+        "pending_count": 0,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
+    lock = _lock_path(db_path)
+    if not _acquire_lock(lock):
+        result["skipped_running"] = True
+        return result
+    try:
+        init_db(db_path)
+        result["expired_count"] = expire_due_searches(db_path) or 0
+        active_list = get_active_searches_all_users(db_path)
+        active_list.sort(key=lambda r: (r.get("last_checked_at") or "", r["id"]))
+
+        for i, s in enumerate(active_list):
+            if time_budget is not None and time.monotonic() - started > time_budget:
+                result["pending_count"] = len(active_list) - i
+                break
+            try:
+                res = run_check_for_search(s["id"], db_path=db_path)
+            except Exception as exc:  # una ruta con datos dañados no debe frenar las demás
+                logging.getLogger("vuelos").error("Ruta %s omitida por error: %s", s["id"], exc)
+                result["failed_count"] += 1
+                continue
+            if res:
+                if res.get("error"):
+                    result["failed_count"] += 1
+                else:
+                    result["checked_count"] += 1
+                if res.get("alert_created"):
+                    result["alerts_triggered"] += 1
+    finally:
+        _release_lock(lock)
+    result["elapsed_seconds"] = round(time.monotonic() - started, 1)
+    return result
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     config.validate_required_settings()
     result = run_all_active_searches()
+    if result["skipped_running"]:
+        print("Ya hay una revisión en curso; se omite esta ejecución.")
+        raise SystemExit(0)
     print(
         f"[{result['timestamp']}] Escaneo autónomo completado: "
         f"{result['checked_count']} búsquedas revisadas, "

@@ -48,3 +48,6 @@ Thumbs.db
 desktop.ini
 .vscode/
 .idea/
+
+# Candado de la revision de precios
+*.revision.lock
