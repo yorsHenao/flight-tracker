@@ -512,11 +512,18 @@ def fetch_live_google_flights(
         return []
 
     tfs = build_google_flights_tfs(orig, dest, flight_date)
-    url = f"https://www.google.com/travel/flights?tfs={tfs}&hl=es-419&gl=CO&curr=COP"
+    # Cadena de variantes: desde algunas IP (p. ej. PythonAnywhere) Google responde a
+    # veces con un ErrorResponse vacío; la ruta /search y hl=en suelen devolver datos.
+    urls = [
+        f"https://www.google.com/travel/flights/search?tfs={tfs}&hl=es-419&gl=CO&curr=COP",
+        f"https://www.google.com/travel/flights/search?tfs={tfs}&hl=en&gl=CO&curr=COP",
+        f"https://www.google.com/travel/flights?tfs={tfs}&hl=es-419&gl=CO&curr=COP",
+        f"https://www.google.com/travel/flights?tfs={tfs}&hl=en&curr=COP",
+    ]
 
     session = requests.Session()
     session.trust_env = True  # respeta HTTP(S)_PROXY (proxy de PythonAnywhere gratis)
-    for attempt in range(2):
+    for attempt, url in enumerate(urls):
         resp = None
         try:
             resp = session.get(url, headers=_HTTP_HEADERS, timeout=timeout)
@@ -541,9 +548,9 @@ def fetch_live_google_flights(
                     _LIVE_CACHE[cache_key] = (time.time(), flights)
                 return [dict(item) for item in flights]
             _log.warning(
-                "Google Flights sin datos legibles (%s-%s %s) bloques=%d tipo=%s url_final=%s inicio=%s",
-                orig, dest, flight_date, len(payloads), resp.headers.get("Content-Type", ""),
-                _safe_snippet(resp.url, 60), _safe_snippet(resp.text),
+                "Google Flights sin datos (%s-%s %s) variante=%d bloques=%d error_google=%s",
+                orig, dest, flight_date, attempt + 1, len(payloads),
+                "ErrorResponse" in json.dumps(payloads)[:400] if payloads else False,
             )
         except Exception as exc:
             _log.warning(
@@ -551,8 +558,8 @@ def fetch_live_google_flights(
                 orig, dest, flight_date, type(exc).__name__, exc,
                 getattr(resp, "status_code", "-"),
             )
-            if attempt == 0:
-                time.sleep(0.25)
+        if attempt < len(urls) - 1:
+            time.sleep(0.3)
 
     return []
 

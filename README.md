@@ -20,7 +20,7 @@ Rastreador de precios de vuelos con alertas por correo. Vigila una ruta y una fe
 - SQLite (archivo local, se crea solo)
 - Jinja2, HTML, CSS y JavaScript sin frameworks
 - requests y BeautifulSoup para consultar Google Flights
-- SMTP (por ejemplo Gmail con contraseña de aplicación) para los avisos
+- Brevo (API transaccional, gratis hasta 300 correos/día) para los avisos, con SMTP como respaldo
 
 ## Estructura
 
@@ -85,6 +85,9 @@ Abre http://localhost:5000. La base de datos `vuelos_tracker.db` y el usuario ad
 | VUELOS_DEMO_MODE | No | Solo para pruebas: precios estimados y simulación (false) |
 | VUELOS_BASE_URL | No | URL pública usada en los enlaces de los correos |
 | VUELOS_DB_PATH | No | Ruta del archivo SQLite |
+| VUELOS_EMAIL_PROVIDER | No | brevo o smtp (por defecto brevo si hay clave) |
+| VUELOS_BREVO_API_KEY | Para correos | Clave API de Brevo (permiso Emails transaccionales) |
+| VUELOS_SENDER_EMAIL | Para correos | Remitente verificado en Brevo |
 | VUELOS_SMTP_ENABLED | No | Activa el envío de correos (true) |
 | VUELOS_SMTP_HOST | No | Servidor SMTP (smtp.gmail.com) |
 | VUELOS_SMTP_PORT | No | Puerto SMTP (587) |

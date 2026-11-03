@@ -43,7 +43,7 @@ class AdminTestEmailTest(unittest.TestCase):
     def test_admin_sends_to_own_email_without_saving(self):
         tok = self._login(config.DEFAULT_ADMIN_USER)
         before = self._alert_count()
-        with mock.patch.object(notifier, "send_smtp_email", return_value=True) as m:
+        with mock.patch.object(notifier, "send_email", return_value=True) as m:
             r = self.client.post("/admin/correo-prueba", data={"csrf_token": tok})
         self.assertEqual(r.status_code, 302)
         kw = m.call_args.kwargs
@@ -55,7 +55,7 @@ class AdminTestEmailTest(unittest.TestCase):
 
     def test_smtp_failure_flashes_error(self):
         tok = self._login(config.DEFAULT_ADMIN_USER)
-        with mock.patch.object(notifier, "send_smtp_email", return_value=False):
+        with mock.patch.object(notifier, "send_email", return_value=False):
             self.client.post("/admin/correo-prueba", data={"csrf_token": tok})
         with self.client.session_transaction() as s:
             msgs = s.get("_flashes", [])
@@ -63,20 +63,20 @@ class AdminTestEmailTest(unittest.TestCase):
 
     def test_non_admin_denied(self):
         tok = self._login("otro_usuario", user_id=99)
-        with mock.patch.object(notifier, "send_smtp_email") as m:
+        with mock.patch.object(notifier, "send_email") as m:
             r = self.client.post("/admin/correo-prueba", data={"csrf_token": tok})
         self.assertEqual(r.status_code, 404)
         m.assert_not_called()
 
     def test_csrf_required(self):
         self._login(config.DEFAULT_ADMIN_USER)
-        with mock.patch.object(notifier, "send_smtp_email") as m:
+        with mock.patch.object(notifier, "send_email") as m:
             self.client.post("/admin/correo-prueba", data={"csrf_token": "malo"})
         m.assert_not_called()
 
     def test_rate_limit(self):
         tok = self._login(config.DEFAULT_ADMIN_USER)
-        with mock.patch.object(notifier, "send_smtp_email", return_value=True) as m:
+        with mock.patch.object(notifier, "send_email", return_value=True) as m:
             for _ in range(4):
                 self.client.post("/admin/correo-prueba", data={"csrf_token": tok})
         self.assertEqual(m.call_count, 3)

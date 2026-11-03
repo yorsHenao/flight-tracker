@@ -41,7 +41,7 @@ class Ds1ExtractTest(unittest.TestCase):
         with mock.patch("requests.Session.get", return_value=resp), \
              self.assertLogs(fe._log, level="WARNING") as logs:
             self.assertEqual(fe.fetch_live_google_flights("MDE", "CLO", "2099-12-06", bypass_cache=True), [])
-        self.assertTrue(any("sin datos legibles" in m for m in logs.output))
+        self.assertTrue(any("sin datos" in m for m in logs.output))
 
 
 class SmtpLogTest(unittest.TestCase):

@@ -186,6 +186,70 @@ def send_smtp_email(to_email: str, subject: str, plain_text: str, html_body: str
         return False
 
 
+BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
+
+
+def _env(name: str, default: str = "") -> str:
+    import os
+    return (os.environ.get(name, default) or "").strip()
+
+
+def send_brevo_email(to_email: str, subject: str, plain_text: str, html_body: str) -> bool:
+    """Envía por la API transaccional de Brevo. Nunca registra la clave."""
+    import requests
+    api_key = _env("VUELOS_BREVO_API_KEY")
+    sender_email = _env("VUELOS_SENDER_EMAIL") or _env("VUELOS_SMTP_USER")
+    sender_name = _env("VUELOS_SMTP_FROM_NAME", "Vuelos Economicos") or "Vuelos Economicos"
+    if not api_key or not sender_email:
+        print(f"[BREVO] Envío omitido: falta clave o remitente (remitente_configurado={bool(sender_email)}).",
+              file=sys.stderr, flush=True)
+        return False
+    payload = {
+        "sender": {"name": sender_name, "email": sender_email},
+        "to": [{"email": to_email}],
+        "subject": subject,
+        "htmlContent": html_body,
+        "textContent": plain_text,
+    }
+    headers = {"api-key": api_key, "accept": "application/json", "content-type": "application/json"}
+    try:
+        timeout = int(_env("VUELOS_BREVO_TIMEOUT", "15") or 15)
+        resp = requests.post(BREVO_API_URL, json=payload, headers=headers, timeout=timeout)
+    except Exception as exc:
+        detail = str(exc).replace(api_key, "***")
+        print(f"[BREVO] Falló la conexión al enviar a {to_email}: {type(exc).__name__}: {detail[:300]}",
+              file=sys.stderr, flush=True)
+        return False
+    if 200 <= resp.status_code < 300:
+        return True
+    try:
+        data = resp.json()
+        message = f"{data.get('code', '')} {data.get('message', '')}".strip()
+    except Exception:
+        message = (resp.text or "")[:300]
+    message = message.replace(api_key, "***")
+    print(f"[BREVO] Falló el envío a {to_email}: HTTP {resp.status_code}: {message[:300]}",
+          file=sys.stderr, flush=True)
+    return False
+
+
+def get_email_provider() -> str:
+    config._load_env_file(config.ENV_FILE_PATH)
+    provider = _env("VUELOS_EMAIL_PROVIDER").lower()
+    if provider in ("brevo", "smtp"):
+        return provider
+    return "brevo" if _env("VUELOS_BREVO_API_KEY") else "smtp"
+
+
+def send_email(to_email: str, subject: str, plain_text: str, html_body: str) -> bool:
+    """Punto único de envío: Brevo si está configurado, SMTP como respaldo."""
+    if get_email_provider() == "brevo":
+        if send_brevo_email(to_email, subject, plain_text, html_body):
+            return True
+        print("[BREVO] Intentando respaldo SMTP.", file=sys.stderr, flush=True)
+    return send_smtp_email(to_email, subject, plain_text, html_body)
+
+
 def notify_lowest_price(
     search_row: dict,
     best_offer: dict,
@@ -198,7 +262,7 @@ def notify_lowest_price(
     payload["subject"] = subject_prefix + payload["subject"]
     sent_ok = False
     if send_email:
-        sent_ok = send_smtp_email(
+        sent_ok = send_email(
             to_email=search_row["notify_email"],
             subject=payload["subject"],
             plain_text=payload["friendly_message"],
@@ -240,7 +304,7 @@ def send_test_email(to_email: str) -> bool:
         "flight_date": None, "deep_link": "https://www.google.com/travel/flights",
     }
     payload = build_friendly_email(sample_search, sample_offer, test_notice=TEST_EMAIL_NOTICE)
-    return send_smtp_email(
+    return send_email(
         to_email=to_email,
         subject="Prueba: correo de alertas de Vuelos Economicos",
         plain_text=payload["friendly_message"],
