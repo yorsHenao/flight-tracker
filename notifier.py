@@ -51,7 +51,8 @@ def _city_code(label: str, fallback: str = "") -> tuple[str, str]:
     return city, code
 
 
-def build_friendly_email(search_row: dict, best_offer: dict, previous_best: float | None = None) -> dict:
+def build_friendly_email(search_row: dict, best_offer: dict, previous_best: float | None = None,
+                         test_notice: str = "") -> dict:
     o_city, o_code = _city_code(search_row.get("origin_label", ""), search_row.get("origin_iata", ""))
     d_city, d_code = _city_code(search_row.get("destination_label", ""), search_row.get("destination_iata", ""))
     route_txt = f"{o_city} ({o_code}) a {d_city} ({d_code})"
@@ -74,6 +75,7 @@ def build_friendly_email(search_row: dict, best_offer: dict, previous_best: floa
     subject = f"Nuevo precio: {route_txt} por {price_str}"
 
     friendly_message = "\n".join(x for x in [
+        *( [test_notice, ""] if test_notice else [] ),
         f"Encontramos un buen precio para {route_txt}.",
         "",
         f"Precio: {price_str}" + (f" · {savings_plain}" if savings_plain else ""),
@@ -90,11 +92,16 @@ def build_friendly_email(search_row: dict, best_offer: dict, previous_best: floa
     badge_color = "#0A58CA" if is_direct else "#3A3A3C"
     savings_html = f'<p style="margin:10px 0 0;font-size:13px;color:#0A58CA;">{e(savings_plain)}</p>' if savings_plain else ""
     times_html = f" · {e(times)}" if times else ""
+    notice_html = (
+        f'<p style="margin:0 0 18px;padding:10px 14px;border-radius:12px;background:#FFF4E5;color:#8A4B00;font-size:13px;">{e(test_notice)}</p>'
+        if test_notice else ""
+    )
 
     html_body = f"""
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:#F5F5F7;padding:28px 16px;color:#1D1D1F;">
   <div style="max-width:480px;margin:0 auto;background:#FFFFFF;border-radius:18px;padding:28px;border:1px solid rgba(0,0,0,0.06);">
     <p style="margin:0 0 18px;font-size:13px;font-weight:600;color:#0A58CA;">Vuelos Economicos</p>
+    {notice_html}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
       <tr>
         <td style="text-align:left;"><div style="font-size:30px;font-weight:700;letter-spacing:-0.02em;">{e(o_code)}</div><div style="font-size:13px;color:#6E6E73;">{e(o_city)}</div></td>
@@ -204,3 +211,26 @@ def notify_lowest_price(
         db_path=db_path,
     )
     return alert_record
+
+
+TEST_EMAIL_NOTICE = "Este es un correo de prueba. Los datos son de ejemplo y no corresponden a un precio real."
+
+
+def send_test_email(to_email: str) -> bool:
+    """Envía un correo de prueba con la plantilla real de alertas. No guarda nada en la base de datos."""
+    sample_search = {
+        "origin_label": "Medellín (MDE)", "origin_iata": "MDE",
+        "destination_label": "Bogotá (BOG)", "destination_iata": "BOG",
+    }
+    sample_offer = {
+        "price": 199900, "is_direct": True, "airline": "Aerolínea de ejemplo",
+        "provider_name": "Google Flights", "departure_time": "06:00", "arrival_time": "07:05",
+        "flight_date": None, "deep_link": "https://www.google.com/travel/flights",
+    }
+    payload = build_friendly_email(sample_search, sample_offer, test_notice=TEST_EMAIL_NOTICE)
+    return send_smtp_email(
+        to_email=to_email,
+        subject="Prueba: correo de alertas de Vuelos Economicos",
+        plain_text=payload["friendly_message"],
+        html_body=payload["html_body"],
+    )

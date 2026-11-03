@@ -64,6 +64,12 @@
           <div class="avatar-pop">
             <div class="avatar-name">{{ user.username }}</div>
             <div class="avatar-mail">{{ user.email }}</div>
+            {% if is_admin %}
+            <form method="POST" action="{{ url_for('send_admin_test_email') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <button type="submit" class="avatar-secondary">Enviar correo de prueba</button>
+            </form>
+            {% endif %}
             <form method="POST" action="{{ url_for('logout') }}">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
               <button type="submit" class="avatar-logout">Cerrar sesión</button>
@@ -238,7 +244,6 @@
         </li>
         {% endfor %}
       </ul>
-      {% if preview.total > preview.offers|length %}<p class="pv-more">Y {{ preview.total - preview.offers|length }} vuelos más al activar el seguimiento.</p>{% endif %}
       {% else %}
       <p class="pv-empty" role="status">No pudimos consultar precios ahora. Lo intentaremos de nuevo. Puedes activar el seguimiento igual y te avisamos cuando haya precios reales.</p>
       {% endif %}
@@ -439,7 +444,7 @@
             <div class="flights-section-header">
               <div class="flights-section-title">
                 <span>Vuelos disponibles ({{ s.travel_date|fecha }})</span>
-                <span class="flights-count-pill">{{ s.offers|length }} vuelos</span>
+                <span class="flights-count-pill">{{ s.offers|length }} más baratos</span>
               </div>
               <div class="flights-portal-quicklinks">
                 <a href="{{ rappi_url }}" target="_blank" rel="noopener noreferrer" class="quick-portal-pill rappi-pill">
@@ -450,7 +455,7 @@
 
             <!-- Lista de Tarjetas de Vuelos Individuales (Estilo Stitch) -->
             <div class="stitch-flights-list">
-              {% for offer in s.offers[:12] %}
+              {% for offer in s.offers %}
                 {% set air_upper = offer.airline|upper %}
                 {% if 'LATAM' in air_upper %}
                   {% set air_code = 'LA' %}

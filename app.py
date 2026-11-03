@@ -34,7 +34,7 @@ from database import (
     get_user_alerts,
     save_search_results,
 )
-from notifier import format_cop, format_date_dmy, format_month_my, notify_lowest_price
+from notifier import send_test_email, format_cop, format_date_dmy, format_month_my, notify_lowest_price
 from providers.airport_resolver import resolve_location, list_popular_suggestions, display_city, LocationNotFound, list_all_location_labels
 from providers.flight_engine import PORTALS, build_deep_link, search_flights_for_date, generate_monthly_calendar_offers
 from scheduler_task import run_check_for_search, run_all_active_searches
@@ -61,6 +61,9 @@ from security import (
 )
 
 config.validate_required_settings()
+
+# Cantidad máxima de tarjetas de precio que se muestran (las más baratas)
+MAX_PRICE_CARDS = 4
 
 app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
@@ -270,6 +273,10 @@ def dashboard():
     for a in alerts:
         a["airline"] = _alert_airline(a.get("friendly_message") or "")
 
+    for s in searches:
+        # Solo los vuelos más baratos (ya vienen ordenados por precio ascendente)
+        s["offers"] = sorted(s.get("offers") or [], key=lambda o: o["price"])[:MAX_PRICE_CARDS]
+
     active_count = sum(1 for s in searches if s["status"] == "activa")
     lowest_global = min(
         (s["best_price"] for s in searches if s.get("best_price") is not None),
@@ -290,6 +297,7 @@ def dashboard():
     return render_template(
         "index.html",
         user=user,
+        is_admin=_is_admin(),
         preview=preview,
         searches=searches,
         alerts=alerts,
@@ -342,7 +350,7 @@ def _build_preview(p: dict) -> dict | None:
         return None
     date_offers = sorted(date_offers, key=lambda o: o["price"])
     cheapest_day = min(monthly, key=lambda o: o["price"]) if monthly else None
-    return dict(p, offers=date_offers[:6], total=len(date_offers),
+    return dict(p, offers=date_offers[:MAX_PRICE_CARDS], total=len(date_offers),
                 best=date_offers[0] if date_offers else None, cheapest_day=cheapest_day)
 
 
@@ -715,6 +723,31 @@ def cron_check_all():
     )})
     resp.headers["Cache-Control"] = "no-store"
     return resp
+
+
+def _is_admin() -> bool:
+    return bool(session.get("user_id")) and (session.get("username") or "").lower() == config.DEFAULT_ADMIN_USER.lower()
+
+
+@app.route("/admin/correo-prueba", methods=["POST"])
+@login_required
+@csrf_required
+def send_admin_test_email():
+    """Envía un correo de prueba solo al correo de la cuenta del administrador."""
+    if not _is_admin():
+        abort(404)
+    if not rate_limiter.is_allowed(f"test_email:{session['user_id']}", max_requests=3, window_seconds=600):
+        flash("Ya enviaste varios correos de prueba. Espera unos minutos.", "error")
+        return redirect(url_for("dashboard"))
+    user = get_user_by_id(session["user_id"])
+    email = (user or {}).get("email") or ""
+    if not email:
+        flash("Tu cuenta no tiene correo configurado.", "error")
+    elif send_test_email(email):
+        flash(f"Correo de prueba enviado a {email}.", "success")
+    else:
+        flash("No se pudo enviar el correo de prueba. Revisa la configuración SMTP del archivo .env.", "error")
+    return redirect(url_for("dashboard"))
 
 
 @app.route("/favicon.ico")

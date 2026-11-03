@@ -1589,6 +1589,8 @@ html[data-palette="mono-azul"] .lg-story .lg-mark { background:var(--story-text)
   border:1px solid var(--border-subtle); border-radius:14px; box-shadow:0 16px 40px rgba(0,0,0,.14); }
 .avatar-name { font-weight:600; font-size:14px; }
 .avatar-mail { font-size:13px; color:var(--text-secondary); margin:2px 0 12px; word-break:break-all; }
+.avatar-secondary { width:100%; border:0; background:transparent; color:var(--accent-primary); font:inherit; font-size:14px; padding:8px 9px; margin-bottom:6px; border-radius:10px; cursor:pointer; text-align:left; }
+.avatar-secondary:hover { background:var(--bg-surface); }
 .avatar-logout { width:100%; border:1px solid var(--border-subtle); background:var(--bg-surface); color:var(--text-primary); font:inherit; font-size:14px; padding:9px; border-radius:10px; cursor:pointer; }
 
 .sb-hero { padding:36px 0 8px; }

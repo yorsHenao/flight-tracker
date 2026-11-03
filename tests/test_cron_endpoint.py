@@ -10,7 +10,7 @@ _TMP = tempfile.mkdtemp()
 os.environ.setdefault("VUELOS_SECRET_KEY", "x" * 64)
 os.environ.setdefault("VUELOS_INVITE_CODE", "codigo-de-prueba-123")
 os.environ.setdefault("VUELOS_ADMIN_PASS", "clave-de-prueba-123")
-os.environ["VUELOS_DB_PATH"] = os.path.join(_TMP, "test.db")
+os.environ.setdefault("VUELOS_DB_PATH", os.path.join(_TMP, "test.db"))
 os.environ["VUELOS_BG_THREAD"] = "false"
 os.environ["VUELOS_SMTP_ENABLED"] = "false"
 
