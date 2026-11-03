@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="es" data-palette="mono-azul">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Mis Vuelos · Buscador en tiempo real</title>
+  <script src="{{ url_for('static', filename='theme-init.js') }}"></script>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='logo.svg') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+</head>
+<body>
+
+  <!-- Barra Superior Stitch (Adaptable a Móvil y Escritorio) -->
+  <header class="stitch-header">
+    <div class="stitch-header-inner">
+      <div class="brand-cluster">
+        <a href="{{ url_for('dashboard') }}" class="mv-brand" aria-label="Mis Vuelos, inicio"><svg class="mv-logo" viewBox="0 0 64 64" aria-hidden="true"><rect x="2" y="2" width="60" height="60" rx="15" class="mv-logo-tile"/><path d="M15 20 C 22 22, 26 34, 31 44 C 35 34, 40 26, 47 22" class="mv-logo-path"/><circle cx="49" cy="20" r="5.5" class="mv-logo-dot"/></svg><span class="mv-wordmark">Mis Vuelos</span></a>
+      </div>
+
+      <div class="header-actions">
+        <button type="button" id="theme-toggle" class="icon-btn theme-btn" aria-label="Cambiar modo de color" title="Cambiar modo claro / oscuro">
+          <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+          <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/>
+            <line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+          <span id="theme-toggle-label" class="hide-mobile">Modo oscuro</span>
+        </button>
+
+        <form method="POST" action="{{ url_for('manual_check_all') }}" style="margin: 0;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <button type="submit" class="icon-btn" title="Actualizar todas las rutas" data-loading-text="...">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+              <path d="M16 16h5v5"/>
+            </svg>
+            <span class="hide-mobile">Actualizar</span>
+          </button>
+        </form>
+
+        <button type="button" class="icon-btn has-badge" data-tab-target="panel-alerts" title="Ver avisos enviados">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+          {% if alerts|length > 0 %}
+            <span class="notif-dot"></span>
+          {% endif %}
+        </button>
+
+        <details class="avatar-menu">
+          <summary class="user-initials-btn" aria-label="Cuenta de {{ user.username }}">{{ user.username[:2]|upper }}</summary>
+          <div class="avatar-pop">
+            <div class="avatar-name">{{ user.username }}</div>
+            <div class="avatar-mail">{{ user.email }}</div>
+            <form method="POST" action="{{ url_for('logout') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <button type="submit" class="avatar-logout">Cerrar sesión</button>
+            </form>
+          </div>
+        </details>
+      </div>
+    </div>
+  </header>
+
+  <main class="stitch-container">
+
+    <!-- Mensajes emergentes (sin banner redundante al crear búsqueda) -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="toast-stack">
+          {% for category, message in messages %}
+            <div class="stitch-toast {{ category }}">
+              <span>{{ message }}</span>
+              <button type="button" class="toast-close" data-dismiss-banner aria-label="Cerrar"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+
+    <section class="sb-hero" id="nueva-busqueda-card">
+      <h2 class="sb-title">¿A dónde vamos?</h2>
+      <p class="sb-lead">Te avisamos por correo cuando el precio baje.</p>
+
+      {% set bar = preview or (searches[0] if searches else none) %}
+      <form method="POST" action="{{ url_for('preview_search') }}" id="create-search-form" class="sb-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <input type="hidden" id="notify_email" name="notify_email" value="{{ user.email }}" />
+        <input type="hidden" id="travel_month" name="travel_month" value="{{ bar.travel_month if bar else default_month }}" />
+
+        <div class="sb-bar">
+          <div class="sb-seg sb-city" data-city-seg>
+            <button type="button" class="sb-seg-btn" data-pop-toggle="pop-origin" aria-haspopup="dialog" aria-expanded="false">
+              <span class="sb-label">Origen</span>
+              <span class="sb-big" data-iata></span>
+              <span class="sb-small" data-cityname></span>
+            </button>
+            <div class="sb-pop sb-pop-city" id="pop-origin" hidden role="dialog" aria-label="Origen">
+              <label class="sb-pop-label" for="origin">Origen</label>
+              <input id="origin" name="origin" type="text" required minlength="2" maxlength="60" autocomplete="off"
+                     pattern="^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜãõâêôçàÃÕÂÊÔÇÀ\s,\.\-\(\)]{2,60}$" placeholder="Ciudad o aeropuerto"
+                     value="{{ bar.origin_label if bar else 'Bogotá, Colombia (BOG)' }}" />
+              <div class="sb-suggest" role="listbox" aria-label="Sugerencias">
+                {% for item in suggestions %}<button type="button" class="sb-sug" data-sug="{{ item }}">{{ item }}</button>{% endfor %}{% for item in all_locations %}<button type="button" class="sb-sug" data-sug="{{ item }}" data-extra hidden>{{ item }}</button>{% endfor %}
+              </div>
+            </div>
+          </div>
+          <button type="button" id="swap-route-btn" class="sb-swap" aria-label="Intercambiar origen y destino">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4l4 4-4 4M21 8H8M7 20l-4-4 4-4M3 16h13"/></svg>
+          </button>
+          <div class="sb-seg sb-city" data-city-seg>
+            <button type="button" class="sb-seg-btn" data-pop-toggle="pop-destination" aria-haspopup="dialog" aria-expanded="false">
+              <span class="sb-label">Destino</span>
+              <span class="sb-big" data-iata></span>
+              <span class="sb-small" data-cityname></span>
+            </button>
+            <div class="sb-pop sb-pop-city" id="pop-destination" hidden role="dialog" aria-label="Destino">
+              <label class="sb-pop-label" for="destination">Destino</label>
+              <input id="destination" name="destination" type="text" required minlength="2" maxlength="60" autocomplete="off"
+                     pattern="^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜãõâêôçàÃÕÂÊÔÇÀ\s,\.\-\(\)]{2,60}$" placeholder="Ciudad o aeropuerto"
+                     value="{{ bar.destination_label if bar else 'Cali, Colombia (CLO)' }}" />
+              <div class="sb-suggest" role="listbox" aria-label="Sugerencias">
+                {% for item in suggestions %}<button type="button" class="sb-sug" data-sug="{{ item }}">{{ item }}</button>{% endfor %}{% for item in all_locations %}<button type="button" class="sb-sug" data-sug="{{ item }}" data-extra hidden>{{ item }}</button>{% endfor %}
+              </div>
+            </div>
+          </div>
+          <div class="sb-seg sb-date" data-date-seg>
+            <span class="sb-label">Fecha</span>
+            <div class="date-input-wrapper" data-datepicker>
+              <input id="travel_date" name="travel_date" type="text" required inputmode="numeric"
+                     autocomplete="off" pattern="\d{2}[\-\/]\d{2}[\-\/]\d{4}"
+                     placeholder="DD-MM-AAAA" aria-label="Fecha de viaje (DD-MM-AAAA)" aria-describedby="travel_date_hint"
+                     value="{{ bar.travel_date|fecha if bar else default_date }}" />
+              <button type="button" class="dp-trigger" aria-haspopup="dialog" aria-expanded="false" aria-label="Abrir calendario">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+              </button>
+            </div>
+            <span class="sb-small" data-weekday></span>
+          </div>
+          <button type="submit" class="sb-go" aria-label="Buscar vuelos" data-loading-text="...">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+            <span class="sb-go-text">Buscar</span>
+          </button>
+        </div>
+        <div id="travel_date_hint" class="dp-hint" aria-live="polite"></div>
+
+        <div class="sb-chips">
+          <div class="sb-chip-wrap">
+            <button type="button" class="sb-chip" data-pop-toggle="pop-days" aria-expanded="false">Vigilar <strong data-chip-for="tracking_days"></strong> <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+            <div class="sb-pop sb-pop-sm" id="pop-days" hidden>
+              <label class="sb-pop-label" for="tracking_days">Vigilar el precio durante</label>
+              <select id="tracking_days" name="tracking_days">
+                <option value="3">3 días</option><option value="7">7 días</option><option value="15" selected>15 días</option>
+                <option value="30">30 días</option><option value="45">45 días</option><option value="60">60 días</option><option value="90">90 días</option>
+              </select>
+            </div>
+          </div>
+          <div class="sb-chip-wrap">
+            <button type="button" class="sb-chip" data-pop-toggle="pop-stops" aria-expanded="false"><strong data-chip-for="stop_filter"></strong> <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+            <div class="sb-pop sb-pop-sm" id="pop-stops" hidden>
+              <label class="sb-pop-label" for="stop_filter">Escalas</label>
+              <select id="stop_filter" name="stop_filter">
+                <option value="all" selected>Directos y con escala</option>
+                <option value="direct">Solo directos</option>
+                <option value="layover">Solo con escala</option>
+              </select>
+            </div>
+          </div>
+          <div class="sb-chip-wrap">
+            <button type="button" class="sb-chip" data-pop-toggle="pop-sites" aria-expanded="false">Sitios: <strong data-chip-sites>Todos</strong> <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+            <div class="sb-pop sb-pop-sites" id="pop-sites" hidden>
+              <span class="sb-pop-label">Mostrar resultados de</span>
+              <div class="portal-chips-scroll" role="group" aria-label="Filtro de sitios">
+                <button type="button" class="portal-chip active" data-portal-filter="all">Todos</button>
+                <button type="button" class="portal-chip" data-portal-filter="google_flights">Google Flights</button>
+                <button type="button" class="portal-chip" data-portal-filter="rappitravel">Rappi Travel</button>
+                <button type="button" class="portal-chip" data-portal-filter="latam">LATAM</button>
+                <button type="button" class="portal-chip" data-portal-filter="jetsmart">JetSMART</button>
+                <button type="button" class="portal-chip" data-portal-filter="wingo">Wingo</button>
+                <button type="button" class="portal-chip" data-portal-filter="avianca">Avianca</button>
+                <button type="button" class="portal-chip" data-portal-filter="skyscanner">Skyscanner</button>
+                <button type="button" class="portal-chip" data-portal-filter="kayak">Kayak</button>
+                <button type="button" class="portal-chip" data-portal-filter="kiwi">Kiwi.com</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </form>
+    </section>
+
+    {% if preview %}
+    <section class="pv-card" id="vista-previa" aria-label="Vista previa de la búsqueda">
+      <div class="pv-head">
+        <span class="pv-kicker">Vista previa · aún no se vigila</span>
+        <span class="pv-date">{{ preview.travel_date|fecha }}</span>
+      </div>
+      <div class="pv-route">
+        <div><div class="pv-code">{{ preview.origin_iata }}</div><div class="pv-city">{{ preview.origin_label|ciudad }}</div></div>
+        <div class="pv-arrow" aria-hidden="true">→</div>
+        <div class="pv-right"><div class="pv-code">{{ preview.destination_iata }}</div><div class="pv-city">{{ preview.destination_label|ciudad }}</div></div>
+      </div>
+      {% if preview.best %}
+      <div class="pv-stats">
+        <div class="pv-stat pv-stat-main">
+          <span class="pv-label">Mejor precio ese día</span>
+          <strong class="pv-price">{{ preview.best.price|cop }}</strong>
+          <span class="pv-sub">{{ preview.best.airline }} · {{ 'Directo' if preview.best.is_direct else 'Con escala' }} · {{ preview.best.departure_time }}</span>
+        </div>
+        {% if preview.cheapest_day %}
+        <div class="pv-stat">
+          <span class="pv-label">Día más barato del mes</span>
+          <strong class="pv-price">{{ preview.cheapest_day.price|cop }}</strong>
+          <span class="pv-sub">{{ preview.cheapest_day.flight_date|fecha }}</span>
+        </div>
+        {% endif %}
+      </div>
+      <ul class="pv-list">
+        {% for o in preview.offers %}
+        <li class="pv-row">
+          <span class="pv-air">{{ o.airline }}</span>
+          <span class="pv-time tabular">{{ o.departure_time }} – {{ o.arrival_time }}</span>
+          <span class="pv-stops">{{ 'Directo' if o.is_direct else (o.layover_info or 'Con escala') }}</span>
+          <span class="pv-row-price tabular">{{ o.price|cop }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% if preview.total > preview.offers|length %}<p class="pv-more">Y {{ preview.total - preview.offers|length }} vuelos más al activar el seguimiento.</p>{% endif %}
+      {% else %}
+      <p class="pv-empty" role="status">No pudimos consultar precios ahora. Lo intentaremos de nuevo. Puedes activar el seguimiento igual y te avisamos cuando haya precios reales.</p>
+      {% endif %}
+      <div class="pv-actions">
+        <form method="POST" action="{{ url_for('add_search') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <input type="hidden" name="origin" value="{{ preview.origin_label }}" />
+          <input type="hidden" name="destination" value="{{ preview.destination_label }}" />
+          <input type="hidden" name="travel_date" value="{{ preview.travel_date }}" />
+          <input type="hidden" name="travel_month" value="{{ preview.travel_month }}" />
+          <input type="hidden" name="stop_filter" value="{{ preview.stop_filter }}" />
+          <input type="hidden" name="tracking_days" value="{{ preview.tracking_days }}" />
+          {% if preview.target_price %}<input type="hidden" name="target_price" value="{{ preview.target_price|int }}" />{% endif %}
+          <button type="submit" class="pv-confirm">Activar seguimiento</button>
+        </form>
+        <form method="POST" action="{{ url_for('discard_preview') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <button type="submit" class="pv-discard">Descartar</button>
+        </form>
+      </div>
+      <p class="pv-note">Al activar, guardamos la ruta en Mis rutas y te avisamos por correo cuando baje el precio.</p>
+    </section>
+    {% endif %}
+
+    <!-- Selector de Pestañas Escritorio -->
+    <div class="desktop-tabs routes-bar">
+      <button type="button" class="d-tab active" data-tab-target="panel-searches">
+        Mis rutas <span class="d-tab-badge">{{ searches|length }}</span>
+      </button>
+      <div class="routes-bar-links">
+        <button type="button" class="text-link" data-tab-target="panel-calendar">Mes a mes</button>
+        <button type="button" class="text-link" data-tab-target="panel-alerts">Avisos enviados ({{ alerts|length }})</button>
+      </div>
+    </div>
+
+    <!-- PANEL 1: RUTAS Y VUELOS DISPONIBLES (ESTILO STITCH BOARDING PASS) -->
+    <div id="panel-searches" class="tab-panel active" role="tabpanel">
+      {% if not searches %}
+        <div class="empty-card">
+          <h3>Aún no tienes rutas en seguimiento</h3>
+          <p>Elige tu origen, destino y fecha arriba para consultar precios reales en vivo.</p>
+        </div>
+      {% else %}
+        {% for s in searches %}
+          {% set rappi_url = build_deep_link('rappitravel', s.origin_iata, s.destination_iata, s.travel_date) %}
+          {% set sky_url = build_deep_link('skyscanner', s.origin_iata, s.destination_iata, s.travel_date) %}
+          {% set kayak_url = build_deep_link('kayak', s.origin_iata, s.destination_iata, s.travel_date) %}
+
+          <!-- Tarjeta de Ruta Estilo Pase de Abordar (Stitch Dark & Light) -->
+          <article class="boarding-card" id="search-{{ s.id }}">
+            <div class="boarding-top-bar">
+              <div class="boarding-status-group">
+                <span class="route-tag">Ruta {{ loop.index }}</span>
+                <span class="status-badge status-{{ s.status }}">
+                  <span class="status-dot"></span>
+                  {% if s.status == 'activa' %}
+                    Vigilancia activa · {{ s.days_remaining }} días
+                  {% elif s.status == 'pausada' %}
+                    En pausa
+                  {% elif s.status == 'finalizada' %}
+                    Finalizada por tiempo
+                  {% else %}
+                    Terminada
+                  {% endif %}
+                </span>
+              </div>
+              {% if s.last_check_ok == 0 and s.best_price %}
+              <p class="route-check-error" role="status">No pudimos consultar precios ahora. Lo intentaremos de nuevo. Mostramos el último precio real encontrado.</p>
+              {% endif %}
+              <div class="boarding-date-pill tabular">
+                Viaje: <strong>{{ s.travel_date|fecha }}</strong>
+              </div>
+            </div>
+
+            <!-- Visualizador IATA Grande -->
+            <div class="boarding-route-visual">
+              <div class="iata-endpoint">
+                <div class="iata-code">{{ s.origin_iata }}</div>
+                <div class="iata-city">{{ s.origin_label|ciudad }}</div>
+              </div>
+
+              <div class="flight-path-center">
+                <div class="flight-path-duration">
+                  {% if s.offers %}
+                    {{ s.offers[0].duration }} · {{ 'Directo' if s.offers[0].is_direct else 'Con escala' }}
+                  {% else %}
+                    Sin datos aún
+                  {% endif %}
+                </div>
+                <div class="flight-path-line">
+                  <span class="path-dot"></span>
+                  <span class="path-dot"></span>
+                  <span class="path-dot"></span>
+                </div>
+              </div>
+
+              <div class="iata-endpoint iata-right">
+                <div class="iata-code">{{ s.destination_iata }}</div>
+                <div class="iata-city">{{ s.destination_label|ciudad }}</div>
+              </div>
+            </div>
+
+            <!-- Caja Destacada MÍNIMO DETECTADO con Reserva Directa en 1 clic -->
+            {% if s.best_price is not none %}
+            <div class="minimo-highlight-box">
+              <div class="minimo-left">
+                <span class="minimo-kicker">Mínimo detectado</span>
+                <div class="minimo-price tabular">{{ s.best_price|cop }}</div>
+              </div>
+              <div class="minimo-right">
+                <div class="minimo-airline">
+                  {% if s.offers %}{{ s.offers[0].airline }} · {{ s.offers[0].departure_time }}{% elif s.best_provider %}{{ s.best_provider }}{% endif %}
+                </div>
+                {% if s.best_url %}
+                  <a href="{{ s.best_url }}" target="_blank" rel="noopener noreferrer" class="minimo-link" data-dynamic-buy-link data-gf-url="{{ s.best_url }}" data-rappi-url="{{ rappi_url }}" data-sky-url="{{ sky_url }}" data-kayak-url="{{ kayak_url }}">
+                    Reserva directa →
+                  </a>
+                {% endif %}
+              </div>
+            </div>
+            {% else %}
+            <div class="minimo-highlight-box minimo-empty">
+              <div class="minimo-left">
+                <span class="minimo-kicker">Sin precios todavía</span>
+                <div class="minimo-empty-text">{% if s.last_check_ok == 0 %}No pudimos consultar precios ahora. Lo intentaremos de nuevo.{% elif s.status == 'activa' %}Buscando precios… pulsa Actualizar para consultar ahora.{% else %}Reanuda la ruta para volver a consultar precios.{% endif %}</div>
+              </div>
+            </div>
+            {% endif %}
+
+            <!-- Botones de Acción de la Ruta -->
+            <div class="boarding-actions-row">
+              {% if s.status == 'activa' %}
+                <form method="POST" action="{{ url_for('manual_check_search', search_id=s.id) }}" class="action-form">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                  <button type="submit" class="b-btn b-btn-primary" data-loading-text="Actualizando...">
+                    Actualizar
+                  </button>
+                </form>
+                <form method="POST" action="{{ url_for('change_search_status', search_id=s.id) }}" class="action-form">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                  <input type="hidden" name="action" value="pause" />
+                  <button type="submit" class="b-btn b-btn-neutral" data-loading-text="...">
+                    Pausar
+                  </button>
+                </form>
+              {% else %}
+                <form method="POST" action="{{ url_for('change_search_status', search_id=s.id) }}" class="action-form">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                  <input type="hidden" name="action" value="resume" />
+                  <button type="submit" class="b-btn b-btn-primary" data-loading-text="...">
+                    Reanudar
+                  </button>
+                </form>
+              {% endif %}
+
+              <form method="POST" action="{{ url_for('remove_search', search_id=s.id) }}" class="action-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <button type="submit" class="b-btn b-btn-danger" data-loading-text="...">
+                  Eliminar
+                </button>
+              </form>
+            </div>
+
+            <!-- Sub-tarjetas comparativas (Mejor Directo y Mes más barato) -->
+            {% if s.best_price is not none or s.cheapest_month_day %}
+            <div class="sub-stats-grid">
+              {% if s.best_direct_offer or s.best_price is not none %}
+              <div class="sub-stat-card">
+                <div class="sub-stat-label">Mejor directo</div>
+                <div class="sub-stat-price tabular">
+                  {{ s.best_direct_offer.price|cop if s.best_direct_offer else s.best_price|cop }}
+                </div>
+                <div class="sub-stat-meta">
+                  {% if s.best_direct_offer %}
+                    <span class="mini-green-chip">{{ s.best_direct_offer.airline }} · {{ s.best_direct_offer.departure_time }}</span>
+                  {% endif %}
+                </div>
+              </div>
+              {% endif %}
+
+              {% if s.cheapest_month_day %}
+                <div class="sub-stat-card">
+                  <div class="sub-stat-label">Mes más barato</div>
+                  <div class="sub-stat-price tabular">{{ s.cheapest_month_day.price|cop }}</div>
+                  <div class="sub-stat-meta">
+                    <span>Fecha {{ s.cheapest_month_day.flight_date|fecha }}</span>
+                    <a href="{{ s.cheapest_month_day.deep_link }}" target="_blank" rel="noopener noreferrer" class="sub-stat-link">
+                      Aprovechar fecha →
+                    </a>
+                  </div>
+                </div>
+              {% endif %}
+            </div>
+
+            {% endif %}
+
+            <!-- Encabezado de Lista de Vuelos Disponibles -->
+            <div class="flights-section-header">
+              <div class="flights-section-title">
+                <span>Vuelos disponibles ({{ s.travel_date|fecha }})</span>
+                <span class="flights-count-pill">{{ s.offers|length }} vuelos</span>
+              </div>
+              <div class="flights-portal-quicklinks">
+                <a href="{{ rappi_url }}" target="_blank" rel="noopener noreferrer" class="quick-portal-pill rappi-pill">
+                  Abrir en Rappi Travel ↗
+                </a>
+              </div>
+            </div>
+
+            <!-- Lista de Tarjetas de Vuelos Individuales (Estilo Stitch) -->
+            <div class="stitch-flights-list">
+              {% for offer in s.offers[:12] %}
+                {% set air_upper = offer.airline|upper %}
+                {% if 'LATAM' in air_upper %}
+                  {% set air_code = 'LA' %}
+                  {% set air_class = 'air-latam' %}
+                  {% set direct_air_url = build_deep_link('latam', s.origin_iata, s.destination_iata, offer.flight_date) %}
+                  {% set air_key = 'latam' %}
+                {% elif 'WINGO' in air_upper %}
+                  {% set air_code = 'W' %}
+                  {% set air_class = 'air-wingo' %}
+                  {% set direct_air_url = build_deep_link('wingo', s.origin_iata, s.destination_iata, offer.flight_date) %}
+                  {% set air_key = 'wingo' %}
+                {% elif 'JETSMART' in air_upper %}
+                  {% set air_code = 'JA' %}
+                  {% set air_class = 'air-jetsmart' %}
+                  {% set direct_air_url = build_deep_link('jetsmart', s.origin_iata, s.destination_iata, offer.flight_date) %}
+                  {% set air_key = 'jetsmart' %}
+                {% elif 'AVIANCA' in air_upper %}
+                  {% set air_code = 'AV' %}
+                  {% set air_class = 'air-avianca' %}
+                  {% set direct_air_url = build_deep_link('avianca', s.origin_iata, s.destination_iata, offer.flight_date) %}
+                  {% set air_key = 'avianca' %}
+                {% else %}
+                  {% set air_code = offer.airline[:2]|upper %}
+                  {% set air_class = 'air-default' %}
+                  {% set direct_air_url = offer.deep_link %}
+                  {% set air_key = 'other' %}
+                {% endif %}
+
+                <div class="stitch-flight-card {{ 'best-flight-glow' if loop.index == 1 else '' }}"
+                     data-flight-card
+                     data-airline-key="{{ air_key }}"
+                     data-gf-booking="{{ offer.deep_link }}"
+                     data-airline-url="{{ direct_air_url }}"
+                     data-rappi-url="{{ rappi_url }}"
+                     data-sky-url="{{ sky_url }}"
+                     data-kayak-url="{{ kayak_url }}">
+
+                  <div class="f-card-top">
+                    <div class="f-airline-brand">
+                      <div class="f-airline-logo {{ air_class }}">{{ air_code }}</div>
+                      <div>
+                        <div class="f-airline-name">{{ offer.airline }}</div>
+                        <div class="f-provider-sub" data-provider-label>Reserva directa · {{ offer.provider_name }}</div>
+                      </div>
+                    </div>
+
+                    <div class="f-badges">
+                      {% if loop.index == 1 %}
+                        <span class="f-badge f-badge-best">Mejor precio</span>
+                      {% endif %}
+                      {% if offer.is_direct %}
+                        <span class="f-badge f-badge-direct">Directo</span>
+                      {% else %}
+                        <span class="f-badge f-badge-layover">{{ offer.layover_info }}</span>
+                      {% endif %}
+                    </div>
+                  </div>
+
+                  <!-- Línea de tiempo de Salida y Llegada -->
+                  <div class="f-timeline-row">
+                    <div class="f-time-block">
+                      <div class="f-hour tabular">{{ offer.departure_time }}</div>
+                      <div class="f-iata">{{ s.origin_iata }}</div>
+                    </div>
+
+                    <div class="f-duration-track">
+                      <div class="f-duration-text">{{ offer.duration }}</div>
+                      <div class="f-track-line">
+                        <span class="f-track-dot"></span>
+                      </div>
+                      <div class="f-stops-caption">{{ 'Sin escalas' if offer.is_direct else offer.layover_info }}</div>
+                    </div>
+
+                    <div class="f-time-block f-time-right">
+                      <div class="f-hour tabular">{{ offer.arrival_time }}</div>
+                      <div class="f-iata">{{ s.destination_iata }}</div>
+                    </div>
+                  </div>
+
+                  <!-- Pie de Tarjeta con Precio y Botón Directo (1 clic a Reserva) -->
+                  <div class="f-card-footer">
+                    <div>
+                      <div class="f-price-label">Tarifa final</div>
+                      <div class="f-price-val tabular">{{ offer.price|cop }}</div>
+                    </div>
+
+                    <div class="f-buy-actions">
+                      <a href="{{ direct_air_url }}" target="_blank" rel="noopener noreferrer" class="btn- secondary-portal-link" title="Ir directo a la web de la aerolínea">
+                        Web aerolínea ↗
+                      </a>
+                      <a href="{{ offer.deep_link }}" target="_blank" rel="noopener noreferrer"
+                         class="btn-buy-flight {{ 'primary-buy' if loop.index == 1 else '' }}"
+                         data-main-buy-btn>
+                        Comprar →
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </article>
+        {% endfor %}
+      {% endif %}
+    </div>
+
+    <!-- PANEL 2: CALENDARIO MES A MES (CON FECHAS DD-MM-YYYY) -->
+    <div id="panel-calendar" class="tab-panel" role="tabpanel">
+      {% if not searches %}
+        <div class="empty-card">
+          <h3>Sin calendarios activos</h3>
+          <p>Agrega una búsqueda arriba para comparar todos los días del mes.</p>
+        </div>
+      {% else %}
+        {% for s in searches %}
+          <section class="boarding-card">
+            <div class="boarding-top-bar">
+              <div>
+                <h3 class="search-card-title" style="margin:0;">{{ s.origin_label }} → {{ s.destination_label }}</h3>
+                <p style="margin:4px 0 0; font-size:13px; color:var(--text-secondary);">
+                  Mes consultado: <strong>{{ s.travel_month|mes }}</strong>
+                  {% if s.cheapest_month_day %}
+                    · Día más barato: <strong>{{ s.cheapest_month_day.flight_date|fecha }}</strong> ({{ s.cheapest_month_day.price|cop }})
+                  {% endif %}
+                </p>
+              </div>
+              {% if s.cheapest_month_day %}
+                <a href="{{ s.cheapest_month_day.deep_link }}" target="_blank" rel="noopener noreferrer" class="btn-buy-flight primary-buy">
+                  Comprar el {{ s.cheapest_month_day.flight_date|fecha }} →
+                </a>
+              {% endif %}
+            </div>
+
+            <div class="calendar-grid">
+              {% for day in s.monthly_calendar %}
+                <div class="calendar-cell {{ 'is-cheapest' if s.cheapest_month_day and day.price == s.cheapest_month_day.price else '' }}">
+                  <div class="cell-top">
+                    <span>{{ day.weekday_name }} {{ day.day_number }}</span>
+                    <span>{{ day.flight_date|fecha }}</span>
+                  </div>
+                  <div class="cell-price tabular">{{ day.price|cop }}</div>
+                  <div class="cell-airline">{{ day.airline }}</div>
+                  <a href="{{ day.deep_link }}" target="_blank" rel="noopener noreferrer" class="cell-buy">
+                    Reservar →
+                  </a>
+                </div>
+              {% endfor %}
+            </div>
+          </section>
+        {% endfor %}
+      {% endif %}
+    </div>
+
+    <!-- PANEL 3: MIS ALERTAS (CON FECHAS DD-MM-YYYY) -->
+    <div id="panel-alerts" class="tab-panel" role="tabpanel">
+      {% if not alerts %}
+        <div class="empty-card">
+          <h3>Sin alertas activas</h3>
+          <p>Cuando detectemos una baja de precio en tus rutas activas, aparecerá aquí y en tu correo.</p>
+        </div>
+      {% else %}
+        <div class="al-list">
+        {% for a in alerts %}
+          <article class="al-card">
+            <div class="al-top">
+              <div class="al-route">
+                <span class="al-code">{{ a.origin_iata }}</span><span class="al-arrow" aria-hidden="true">→</span><span class="al-code">{{ a.destination_iata }}</span>
+              </div>
+              <span class="al-sent">{{ 'Enviado' if a.email_sent else 'Registrado' }} {{ (a.created_at or '')[:16]|fecha }}</span>
+            </div>
+            <div class="al-cities">{{ a.origin_label|ciudad }} a {{ a.destination_label|ciudad }}</div>
+            <div class="al-mid">
+              <strong class="al-price tabular">{{ a.price|cop }}</strong>
+              <span class="al-pill {{ 'is-direct' if a.is_direct else '' }}">{{ 'Directo' if a.is_direct else 'Con escala' }}</span>
+            </div>
+            <div class="al-meta">
+              {% if a.airline %}<span>{{ a.airline }}</span>{% endif %}
+              <span>Vuelo {{ a.flight_date|fecha }}</span>
+              {% if a.provider_name %}<span>{{ a.provider_name }}</span>{% endif %}
+            </div>
+            {% if a.deep_link %}<a href="{{ a.deep_link }}" target="_blank" rel="noopener noreferrer" class="al-btn">Ir a la reserva</a>{% endif %}
+          </article>
+        {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+
+  </main>
+
+  <!-- Barra de Navegación Inferior Fija Estilo App Móvil (Stitch) -->
+  <nav class="stitch-bottom-nav" aria-label="Navegación principal">
+    <button type="button" class="bnav-item active" data-tab-target="panel-searches">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+      </svg>
+      <span>Rutas ({{ searches|length }})</span>
+    </button>
+
+    <button type="button" class="bnav-item" data-tab-target="panel-calendar">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+      <span>Mes a mes</span>
+    </button>
+
+    <a href="#nueva-busqueda-card" class="bnav-fab" aria-label="Nueva búsqueda">
+      <span>+</span>
+    </a>
+
+    <button type="button" class="bnav-item" data-tab-target="panel-alerts">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+      </svg>
+      <span>Avisos ({{ alerts|length }})</span>
+    </button>
+
+    <button type="button" class="bnav-item" id="mobile-theme-switch">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </svg>
+      <span>Tema</span>
+    </button>
+  </nav>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

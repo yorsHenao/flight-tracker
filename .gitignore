@@ -1,0 +1,50 @@
+# Secretos y configuracion local
+.env
+.env.*
+!.env.example
+CREDENCIALES_LEEME.txt
+
+# Bases de datos (se crean solas al primer arranque)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3*
+instance/
+
+# Copias y respaldos
+*.bak
+*.bak*
+*.orig
+*~
+_backup*/
+_respaldos*/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# Entornos virtuales
+venv/
+.venv/
+env/
+
+# Logs y artefactos
+*.log
+logs/
+*.zip
+capturas/
+correos/
+
+# Sistema y editores
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

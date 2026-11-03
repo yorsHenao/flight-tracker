@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es" data-palette="mono-azul">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ 'Crear cuenta' if mode == 'register' else 'Iniciar sesión' }} | Mis Vuelos</title>
+  <script src="{{ url_for('static', filename='theme-init.js') }}"></script>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='logo.svg') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+</head>
+<body class="lg-body">
+  <main class="lg-shell">
+    <section class="lg-story" aria-hidden="true">
+      <div class="lg-brand"><span class="lg-mark"><svg class="mv-logo" viewBox="0 0 64 64" aria-hidden="true"><rect x="2" y="2" width="60" height="60" rx="15" class="mv-logo-tile"/><path d="M15 20 C 22 22, 26 34, 31 44 C 35 34, 40 26, 47 22" class="mv-logo-path"/><circle cx="49" cy="20" r="5.5" class="mv-logo-dot"/></svg></span><span class="mv-wordmark">Mis Vuelos</span></div>
+      <div class="lg-route" id="lg-route">
+        <div class="lg-city"><span class="lg-iata" data-r="o">BOG</span><span class="lg-cityname" data-r="oc">Bogotá</span></div>
+        <svg class="lg-arc" viewBox="0 0 240 70" preserveAspectRatio="none">
+          <path d="M4 64 C 70 -10, 170 -10, 236 64" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 6" stroke-linecap="round"/>
+          <circle cx="120" cy="8.5" r="4.5" class="lg-arc-dot"/>
+        </svg>
+        <div class="lg-city lg-city-end"><span class="lg-iata" data-r="d">CLO</span><span class="lg-cityname" data-r="dc">Cali</span></div>
+      </div>
+      <p class="lg-claim">Vigilamos el precio de tu vuelo cada día y te escribimos cuando baja.</p>
+    </section>
+
+    <section class="lg-panel">
+      <button type="button" id="theme-toggle" class="lg-theme" aria-label="Cambiar modo de color">
+        <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <span id="theme-toggle-label" class="sr-only">Modo oscuro</span>
+      </button>
+
+      <div class="lg-form-wrap">
+        <div class="lg-brand lg-brand-mobile"><span class="lg-mark"><svg class="mv-logo" viewBox="0 0 64 64" aria-hidden="true"><rect x="2" y="2" width="60" height="60" rx="15" class="mv-logo-tile"/><path d="M15 20 C 22 22, 26 34, 31 44 C 35 34, 40 26, 47 22" class="mv-logo-path"/><circle cx="49" cy="20" r="5.5" class="mv-logo-dot"/></svg></span><span class="mv-wordmark">Mis Vuelos</span></div>
+        <h1 class="lg-title">{{ 'Crea tu cuenta' if mode == 'register' else 'Bienvenido de nuevo' }}</h1>
+        <p class="lg-sub">{{ 'Necesitas el código de invitación del administrador.' if mode == 'register' else 'Entra para ver tus rutas y alertas de precio.' }}</p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="lg-alerts" role="alert">
+              {% for category, message in messages %}
+                <div class="lg-alert lg-alert-{{ category }}">{{ message }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        {% if mode == 'register' %}
+        <form method="POST" action="{{ url_for('register') }}" autocomplete="off" class="lg-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <label class="lg-field"><span>Usuario</span>
+            <input id="username" name="username" type="text" required minlength="3" maxlength="32"
+                   pattern="^[a-zA-Z0-9_.\-]{3,32}$" autocomplete="username" placeholder="jeisembert" /></label>
+          <label class="lg-field"><span>Correo</span>
+            <input id="email" name="email" type="email" required maxlength="120" autocomplete="email" placeholder="tucorreo@ejemplo.com" /></label>
+          <label class="lg-field"><span>Contraseña</span>
+            <span class="lg-pass"><input id="password" name="password" type="password" required minlength="10" maxlength="128" autocomplete="new-password" placeholder="Mínimo 10, letras y números" />
+            <button type="button" class="lg-reveal" data-reveal="password" aria-label="Mostrar contraseña">Mostrar</button></span></label>
+          <label class="lg-field"><span>Código de invitación</span>
+            <input id="invitation_code" name="invitation_code" type="password" required maxlength="64" autocomplete="off" /></label>
+          <button type="submit" class="lg-submit" data-loading-text="Creando cuenta...">Crear cuenta</button>
+        </form>
+        <p class="lg-switch">¿Ya tienes cuenta? <a href="{{ url_for('login') }}">Inicia sesión</a></p>
+        {% else %}
+        <form method="POST" action="{{ url_for('login') }}" class="lg-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <label class="lg-field"><span>Usuario o correo</span>
+            <input id="username" name="username" type="text" required maxlength="120" autocomplete="username" autofocus /></label>
+          <label class="lg-field"><span>Contraseña</span>
+            <span class="lg-pass"><input id="password" name="password" type="password" required minlength="6" maxlength="128" autocomplete="current-password" />
+            <button type="button" class="lg-reveal" data-reveal="password" aria-label="Mostrar contraseña">Mostrar</button></span></label>
+          <button type="submit" class="lg-submit" data-loading-text="Entrando...">Iniciar sesión</button>
+        </form>
+        <p class="lg-switch">¿No tienes cuenta? <a href="{{ url_for('register') }}">Crea una con tu invitación</a></p>
+        {% endif %}
+      </div>
+    </section>
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

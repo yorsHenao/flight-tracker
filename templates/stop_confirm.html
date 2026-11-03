@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Seguimiento finalizado · Radar de Vuelos</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+</head>
+<body>
+  <div class="auth-page">
+    <div class="auth-card" style="text-align: center;">
+      <div class="auth-logo" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"/>
+          <rect x="9" y="9" width="6" height="6" rx="1"/>
+        </svg>
+      </div>
+      {% if error %}
+        <div style="margin-bottom: 10px;">
+          <span class="badge badge-status-detenida">Aviso</span>
+        </div>
+        <h1 class="auth-title">{{ error }}</h1>
+        <p class="auth-subtitle" style="margin-bottom: 24px;">
+          Verifica el enlace o ingresa directamente a tu panel de control.
+        </p>
+      {% else %}
+        <div style="margin-bottom: 10px;">
+          <span class="badge badge-status-detenida">Seguimiento detenido</span>
+        </div>
+        <h1 class="auth-title">Búsqueda terminada con éxito</h1>
+        <p class="auth-subtitle" style="margin-bottom: 24px;">
+          Hemos detenido el seguimiento de la ruta
+          <strong>{{ search.origin_label }} a {{ search.destination_label }}</strong>.
+          Ya no recibirás más correos de alerta para esta búsqueda.
+        </p>
+      {% endif %}
+      <a href="{{ url_for('dashboard') }}" class="btn btn-primary" style="width: 100%; padding: 11px 18px;">
+        Volver al panel de vuelos
+      </a>
+    </div>
+  </div>
+</body>
+</html>
