@@ -50,14 +50,14 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
           <label class="lg-field"><span>Usuario</span>
             <input id="username" name="username" type="text" required minlength="3" maxlength="32"
-                   pattern="^[a-zA-Z0-9_.\-]{3,32}$" autocomplete="username" placeholder="jeisembert" /></label>
+                   pattern="^[a-zA-Z0-9_.\-]{3,32}$" autocomplete="username" placeholder="tu_usuario" /></label>
           <label class="lg-field"><span>Correo</span>
             <input id="email" name="email" type="email" required maxlength="120" autocomplete="email" placeholder="tucorreo@ejemplo.com" /></label>
           <label class="lg-field"><span>Contraseña</span>
             <span class="lg-pass"><input id="password" name="password" type="password" required minlength="10" maxlength="128" autocomplete="new-password" placeholder="Mínimo 10, letras y números" />
             <button type="button" class="lg-reveal" data-reveal="password" aria-label="Mostrar contraseña">Mostrar</button></span></label>
           <label class="lg-field"><span>Código de invitación</span>
-            <input id="invitation_code" name="invitation_code" type="password" required maxlength="64" autocomplete="off" /></label>
+            <input id="invitation_code" name="invitation_code" type="password" required minlength="4" maxlength="64" placeholder="Te lo da el administrador" autocomplete="off" /></label>
           <button type="submit" class="lg-submit" data-loading-text="Creando cuenta...">Crear cuenta</button>
         </form>
         <p class="lg-switch">¿Ya tienes cuenta? <a href="{{ url_for('login') }}">Inicia sesión</a></p>

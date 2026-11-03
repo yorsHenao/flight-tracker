@@ -202,7 +202,7 @@ def register():
             return render_template("login.html", mode="register"), 400
 
         if not hmac.compare_digest(invite_code, config.INVITATION_CODE):
-            msg = "Código Maestro de Invitación inválido. El registro es privado."
+            msg = "Código de invitación inválido. El registro es privado."
             if _wants_json():
                 return jsonify({"ok": False, "error": msg}), 403
             flash(msg, "error")
