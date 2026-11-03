@@ -1,6 +1,6 @@
 # Mis Vuelos (`vuelos_tracker`) — Guía para PythonAnywhere
 
-Sistema web autónomo en Python + Flask + SQLite para monitorear precios reales de vuelos en **Google Flights, Rappi Travel, LATAM, JetSMART, Wingo, Avianca, Skyscanner, Kayak y Kiwi.com**, diseñado para ejecutarse dentro de los límites de una cuenta de **PythonAnywhere** (< 1 MB en disco).
+Sistema web autónomo en Python + Flask + SQLite para monitorear precios reales de vuelos en **Google Flights** (fuente de precios reales), con enlaces para abrir la misma búsqueda en **Kayak, Skyscanner y Booking** y filtros por aerolínea (Avianca, LATAM, JetSMART, Wingo) sobre los resultados de Google, diseñado para ejecutarse dentro de los límites de una cuenta de **PythonAnywhere** (< 1 MB en disco).
 
 ---
 

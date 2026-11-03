@@ -36,6 +36,7 @@
           <span id="theme-toggle-label" class="hide-mobile">Modo oscuro</span>
         </button>
 
+        {% if user %}
         <form method="POST" action="{{ url_for('manual_check_all') }}" style="margin: 0;">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
           <button type="submit" class="icon-btn" title="Actualizar todas las rutas" data-loading-text="...">
@@ -76,6 +77,10 @@
             </form>
           </div>
         </details>
+        {% else %}
+        <a href="{{ url_for('register') }}" class="gx-btn gx-btn-ghost gx-hide-mobile">Crear cuenta</a>
+        <a href="{{ url_for('login') }}" class="gx-btn gx-btn-primary"><span class="gx-hide-mobile">Iniciar sesión</span><span class="gx-show-mobile">Entrar</span></a>
+        {% endif %}
       </div>
     </div>
   </header>
@@ -99,13 +104,13 @@
 
     <section class="sb-hero" id="nueva-busqueda-card">
       <h2 class="sb-title">¿A dónde vamos?</h2>
-      <p class="sb-lead">Te avisamos por correo cuando el precio baje.</p>
+      <p class="sb-lead">{% if user %}Te avisamos por correo cuando el precio baje.{% else %}Compara precios reales de vuelos en Colombia.{% endif %}</p>
 
-      {% set bar = preview or (searches[0] if searches else none) %}
+      {% set bar = preview or (searches[0] if searches else none) %}{% set guest = not user %}
       <form method="POST" action="{{ url_for('preview_search') }}" id="create-search-form" class="sb-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-        <input type="hidden" id="notify_email" name="notify_email" value="{{ user.email }}" />
-        <input type="hidden" id="travel_month" name="travel_month" value="{{ bar.travel_month if bar else default_month }}" />
+        {% if user %}<input type="hidden" id="notify_email" name="notify_email" value="{{ user.email }}" />{% endif %}
+        <input type="hidden" id="travel_month" name="travel_month" value="{{ bar.travel_month if bar else ('' if guest else default_month) }}" />
 
         <div class="sb-bar">
           <div class="sb-seg sb-city" data-city-seg>
@@ -118,7 +123,7 @@
               <label class="sb-pop-label" for="origin">Origen</label>
               <input id="origin" name="origin" type="text" required minlength="2" maxlength="60" autocomplete="off"
                      pattern="^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜãõâêôçàÃÕÂÊÔÇÀ\s,\.\-\(\)]{2,60}$" placeholder="Ciudad o aeropuerto"
-                     value="{{ bar.origin_label if bar else 'Bogotá, Colombia (BOG)' }}" />
+                     value="{{ bar.origin_label if bar else ('' if guest else 'Bogotá, Colombia (BOG)') }}" />
               <div class="sb-suggest" role="listbox" aria-label="Sugerencias">
                 {% for item in suggestions %}<button type="button" class="sb-sug" data-sug="{{ item }}">{{ item }}</button>{% endfor %}{% for item in all_locations %}<button type="button" class="sb-sug" data-sug="{{ item }}" data-extra hidden>{{ item }}</button>{% endfor %}
               </div>
@@ -137,7 +142,7 @@
               <label class="sb-pop-label" for="destination">Destino</label>
               <input id="destination" name="destination" type="text" required minlength="2" maxlength="60" autocomplete="off"
                      pattern="^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜãõâêôçàÃÕÂÊÔÇÀ\s,\.\-\(\)]{2,60}$" placeholder="Ciudad o aeropuerto"
-                     value="{{ bar.destination_label if bar else 'Cali, Colombia (CLO)' }}" />
+                     value="{{ bar.destination_label if bar else ('' if guest else 'Cali, Colombia (CLO)') }}" />
               <div class="sb-suggest" role="listbox" aria-label="Sugerencias">
                 {% for item in suggestions %}<button type="button" class="sb-sug" data-sug="{{ item }}">{{ item }}</button>{% endfor %}{% for item in all_locations %}<button type="button" class="sb-sug" data-sug="{{ item }}" data-extra hidden>{{ item }}</button>{% endfor %}
               </div>
@@ -149,7 +154,7 @@
               <input id="travel_date" name="travel_date" type="text" required inputmode="numeric"
                      autocomplete="off" pattern="\d{2}[\-\/]\d{2}[\-\/]\d{4}"
                      placeholder="DD-MM-AAAA" aria-label="Fecha de viaje (DD-MM-AAAA)" aria-describedby="travel_date_hint"
-                     value="{{ bar.travel_date|fecha if bar else default_date }}" />
+                     value="{{ bar.travel_date|fecha if bar else ('' if guest else default_date) }}" />
               <button type="button" class="dp-trigger" aria-haspopup="dialog" aria-expanded="false" aria-label="Abrir calendario">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
               </button>
@@ -164,7 +169,7 @@
         <div id="travel_date_hint" class="dp-hint" aria-live="polite"></div>
 
         <div class="sb-chips">
-          <div class="sb-chip-wrap">
+          <div class="sb-chip-wrap"{% if guest %} style="display:none"{% endif %}>
             <button type="button" class="sb-chip" data-pop-toggle="pop-days" aria-expanded="false">Vigilar <strong data-chip-for="tracking_days"></strong> <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
             <div class="sb-pop sb-pop-sm" id="pop-days" hidden>
               <label class="sb-pop-label" for="tracking_days">Vigilar el precio durante</label>
@@ -188,18 +193,20 @@
           <div class="sb-chip-wrap">
             <button type="button" class="sb-chip" data-pop-toggle="pop-sites" aria-expanded="false">Sitios: <strong data-chip-sites>Todos</strong> <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
             <div class="sb-pop sb-pop-sites" id="pop-sites" hidden>
-              <span class="sb-pop-label">Mostrar resultados de</span>
-              <div class="portal-chips-scroll" role="group" aria-label="Filtro de sitios">
+              <span class="sb-pop-label">Abrir búsqueda en</span>
+              <div class="portal-chips-scroll" role="group" aria-label="Abrir búsqueda en">
                 <button type="button" class="portal-chip active" data-portal-filter="all">Todos</button>
                 <button type="button" class="portal-chip" data-portal-filter="google_flights">Google Flights</button>
-                <button type="button" class="portal-chip" data-portal-filter="rappitravel">Rappi Travel</button>
+                <button type="button" class="portal-chip" data-portal-filter="kayak">Kayak</button>
+                <button type="button" class="portal-chip" data-portal-filter="skyscanner">Skyscanner</button>
+                <button type="button" class="portal-chip" data-portal-filter="booking">Booking</button>
+              </div>
+              <span class="sb-pop-label">Filtrar por aerolínea</span>
+              <div class="portal-chips-scroll" role="group" aria-label="Filtrar por aerolínea">
+                <button type="button" class="portal-chip" data-portal-filter="avianca">Avianca</button>
                 <button type="button" class="portal-chip" data-portal-filter="latam">LATAM</button>
                 <button type="button" class="portal-chip" data-portal-filter="jetsmart">JetSMART</button>
                 <button type="button" class="portal-chip" data-portal-filter="wingo">Wingo</button>
-                <button type="button" class="portal-chip" data-portal-filter="avianca">Avianca</button>
-                <button type="button" class="portal-chip" data-portal-filter="skyscanner">Skyscanner</button>
-                <button type="button" class="portal-chip" data-portal-filter="kayak">Kayak</button>
-                <button type="button" class="portal-chip" data-portal-filter="kiwi">Kiwi.com</button>
               </div>
             </div>
           </div>
@@ -208,7 +215,49 @@
       </form>
     </section>
 
+    {% if guest %}
     {% if preview %}
+    <section class="gx-results" id="vista-previa" aria-label="Resultados de la búsqueda">
+      <div class="gx-results-head">
+        <h3>Los precios más bajos</h3>
+        <span class="gx-sub">{{ preview.origin_label|ciudad }} a {{ preview.destination_label|ciudad }} · {{ preview.travel_date|fecha }}</span>
+      </div>
+      {% if preview.offers %}
+      <div class="gx-grid">
+        {% for o in preview.offers %}
+        {% set air_upper = o.airline|upper %}
+        {% set air_key = 'latam' if 'LATAM' in air_upper else ('wingo' if 'WINGO' in air_upper else ('jetsmart' if 'JETSMART' in air_upper else ('avianca' if 'AVIANCA' in air_upper else 'other'))) %}
+        <article class="gx-card" data-flight-card data-airline-key="{{ air_key }}"
+                 data-gf-booking="{{ o.deep_link }}"
+                 data-sky-url="{{ build_deep_link('skyscanner', preview.origin_iata, preview.destination_iata, preview.travel_date) }}"
+                 data-kayak-url="{{ build_deep_link('kayak', preview.origin_iata, preview.destination_iata, preview.travel_date) }}"
+                 data-booking-url="{{ build_deep_link('booking', preview.origin_iata, preview.destination_iata, preview.travel_date) }}">
+          <div class="gx-route"><span>{{ preview.origin_iata }}</span><span class="gx-arrow" aria-hidden="true">→</span><span>{{ preview.destination_iata }}</span></div>
+          <div class="gx-price tabular">{{ o.price|cop }}</div>
+          <div class="gx-meta">{{ o.airline }} · {{ 'Directo' if o.is_direct else (o.layover_info or 'Con escala') }}{% if o.departure_time %} · {{ o.departure_time }}{% if o.arrival_time %} – {{ o.arrival_time }}{% endif %}{% endif %}</div>
+          <a href="{{ o.deep_link }}" class="gx-book" target="_blank" rel="noopener noreferrer" data-main-buy-btn data-buy-label="Reservar">Reservar</a>
+        </article>
+        {% endfor %}
+      </div>
+      <div class="gx-banner">
+        <p>¿Quieres que te avisemos si baja el precio? Crea una cuenta.</p>
+        <a href="{{ url_for('register') }}" class="gx-btn gx-btn-primary">Crear cuenta</a>
+      </div>
+      {% else %}
+      <p class="gx-empty-msg" role="status">No pudimos consultar precios para esa ruta ahora. Intenta de nuevo en unos minutos.</p>
+      {% endif %}
+    </section>
+    {% else %}
+    <section class="gx-empty" aria-label="Resultados">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      <h3>Busca una ruta para ver los precios más bajos</h3>
+      <p>Elige origen, destino y fecha. Te mostramos las 4 opciones más baratas en vivo.</p>
+    </section>
+    {% endif %}
+    <p class="gx-limit">Como invitado puedes hacer hasta {{ guest_limit }} búsquedas por hora.</p>
+    {% endif %}
+
+    {% if preview and user %}
     <section class="pv-card" id="vista-previa" aria-label="Vista previa de la búsqueda">
       <div class="pv-head">
         <span class="pv-kicker">Vista previa · aún no se vigila</span>
@@ -268,6 +317,7 @@
     </section>
     {% endif %}
 
+    {% if user %}
     <!-- Selector de Pestañas Escritorio -->
     <div class="desktop-tabs routes-bar">
       <button type="button" class="d-tab active" data-tab-target="panel-searches">
@@ -288,7 +338,7 @@
         </div>
       {% else %}
         {% for s in searches %}
-          {% set rappi_url = build_deep_link('rappitravel', s.origin_iata, s.destination_iata, s.travel_date) %}
+          {% set booking_url = build_deep_link('booking', s.origin_iata, s.destination_iata, s.travel_date) %}
           {% set sky_url = build_deep_link('skyscanner', s.origin_iata, s.destination_iata, s.travel_date) %}
           {% set kayak_url = build_deep_link('kayak', s.origin_iata, s.destination_iata, s.travel_date) %}
 
@@ -358,7 +408,7 @@
                   {% if s.offers %}{{ s.offers[0].airline }} · {{ s.offers[0].departure_time }}{% elif s.best_provider %}{{ s.best_provider }}{% endif %}
                 </div>
                 {% if s.best_url %}
-                  <a href="{{ s.best_url }}" target="_blank" rel="noopener noreferrer" class="minimo-link" data-dynamic-buy-link data-gf-url="{{ s.best_url }}" data-rappi-url="{{ rappi_url }}" data-sky-url="{{ sky_url }}" data-kayak-url="{{ kayak_url }}">
+                  <a href="{{ s.best_url }}" target="_blank" rel="noopener noreferrer" class="minimo-link" data-dynamic-buy-link data-gf-url="{{ s.best_url }}" data-booking-url="{{ booking_url }}" data-sky-url="{{ sky_url }}" data-kayak-url="{{ kayak_url }}">
                     Reserva directa →
                   </a>
                 {% endif %}
@@ -447,9 +497,9 @@
                 <span class="flights-count-pill">{{ s.offers|length }} más baratos</span>
               </div>
               <div class="flights-portal-quicklinks">
-                <a href="{{ rappi_url }}" target="_blank" rel="noopener noreferrer" class="quick-portal-pill rappi-pill">
-                  Abrir en Rappi Travel ↗
-                </a>
+                <a href="{{ kayak_url }}" target="_blank" rel="noopener noreferrer" class="quick-portal-pill portal-pill">Kayak ↗</a>
+                <a href="{{ sky_url }}" target="_blank" rel="noopener noreferrer" class="quick-portal-pill portal-pill">Skyscanner ↗</a>
+                <a href="{{ booking_url }}" target="_blank" rel="noopener noreferrer" class="quick-portal-pill portal-pill">Booking ↗</a>
               </div>
             </div>
 
@@ -460,27 +510,22 @@
                 {% if 'LATAM' in air_upper %}
                   {% set air_code = 'LA' %}
                   {% set air_class = 'air-latam' %}
-                  {% set direct_air_url = build_deep_link('latam', s.origin_iata, s.destination_iata, offer.flight_date) %}
                   {% set air_key = 'latam' %}
                 {% elif 'WINGO' in air_upper %}
                   {% set air_code = 'W' %}
                   {% set air_class = 'air-wingo' %}
-                  {% set direct_air_url = build_deep_link('wingo', s.origin_iata, s.destination_iata, offer.flight_date) %}
                   {% set air_key = 'wingo' %}
                 {% elif 'JETSMART' in air_upper %}
                   {% set air_code = 'JA' %}
                   {% set air_class = 'air-jetsmart' %}
-                  {% set direct_air_url = build_deep_link('jetsmart', s.origin_iata, s.destination_iata, offer.flight_date) %}
                   {% set air_key = 'jetsmart' %}
                 {% elif 'AVIANCA' in air_upper %}
                   {% set air_code = 'AV' %}
                   {% set air_class = 'air-avianca' %}
-                  {% set direct_air_url = build_deep_link('avianca', s.origin_iata, s.destination_iata, offer.flight_date) %}
                   {% set air_key = 'avianca' %}
                 {% else %}
                   {% set air_code = offer.airline[:2]|upper %}
                   {% set air_class = 'air-default' %}
-                  {% set direct_air_url = offer.deep_link %}
                   {% set air_key = 'other' %}
                 {% endif %}
 
@@ -488,8 +533,7 @@
                      data-flight-card
                      data-airline-key="{{ air_key }}"
                      data-gf-booking="{{ offer.deep_link }}"
-                     data-airline-url="{{ direct_air_url }}"
-                     data-rappi-url="{{ rappi_url }}"
+                     data-booking-url="{{ booking_url }}"
                      data-sky-url="{{ sky_url }}"
                      data-kayak-url="{{ kayak_url }}">
 
@@ -543,9 +587,6 @@
                     </div>
 
                     <div class="f-buy-actions">
-                      <a href="{{ direct_air_url }}" target="_blank" rel="noopener noreferrer" class="btn- secondary-portal-link" title="Ir directo a la web de la aerolínea">
-                        Web aerolínea ↗
-                      </a>
                       <a href="{{ offer.deep_link }}" target="_blank" rel="noopener noreferrer"
                          class="btn-buy-flight {{ 'primary-buy' if loop.index == 1 else '' }}"
                          data-main-buy-btn>
@@ -642,8 +683,10 @@
       {% endif %}
     </div>
 
+    {% endif %}
   </main>
 
+  {% if user %}
   <!-- Barra de Navegación Inferior Fija Estilo App Móvil (Stitch) -->
   <nav class="stitch-bottom-nav" aria-label="Navegación principal">
     <button type="button" class="bnav-item active" data-tab-target="panel-searches">
@@ -682,6 +725,7 @@
       <span>Tema</span>
     </button>
   </nav>
+  {% endif %}
 
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>

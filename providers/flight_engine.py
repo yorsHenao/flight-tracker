@@ -18,19 +18,14 @@ import requests
 
 from providers.airport_resolver import resolve_location
 
-# Catálogo de portales soportados (incluye Rappi Travel y aerolíneas directas)
+# Catálogo de portales: Google Flights (precios reales), buscadores con enlace que sí
+# precarga la ruta (Kayak, Skyscanner, Booking) y aerolíneas (solo filtro sobre resultados de Google)
 PORTALS = [
     {
         "id": "google_flights",
         "name": "Google Flights",
         "home": "https://www.google.com/travel/flights",
         "badge_color": "#0EA5E9",
-    },
-    {
-        "id": "rappitravel",
-        "name": "Rappi Travel",
-        "home": "https://travel.rappi.com/co/flights",
-        "badge_color": "#FF441F",
     },
     {
         "id": "latam",
@@ -69,10 +64,10 @@ PORTALS = [
         "badge_color": "#FF690F",
     },
     {
-        "id": "kiwi",
-        "name": "Kiwi.com",
-        "home": "https://www.kiwi.com/co",
-        "badge_color": "#00A991",
+        "id": "booking",
+        "name": "Booking",
+        "home": "https://www.booking.com/flights/index.es.html",
+        "badge_color": "#003580",
     },
 ]
 
@@ -256,8 +251,9 @@ def build_deep_link(
     dest_slug: str = "",
 ) -> str:
     """
-    Construye el enlace directo de compra hacia cada portal o aerolínea
-    con origen, destino y fecha exacta precargados.
+    Enlace de búsqueda con origen, destino y fecha precargados.
+    Solo Kayak, Skyscanner y Booking (probados). Cualquier otro id, incluidas las
+    aerolíneas, usa Google Flights, porque sus enlaces directos no precargan la ruta.
     """
     orig = orig_iata.upper()
     dest = dest_iata.upper()
@@ -267,44 +263,11 @@ def build_deep_link(
         tfs = build_google_flights_tfs(orig, dest, flight_date)
         return f"https://www.google.com/travel/flights?tfs={tfs}&hl=es-419&gl=CO&curr=COP"
 
-    if provider_id == "rappitravel":
-        return (
-            f"https://travel.rappi.com/co/flights?origin={orig}&destination={dest}"
-            f"&departureDate={flight_date}&adults=1&cabinClass=economy"
-        )
-
-    if provider_id == "latam":
-        return (
-            f"https://www.latamairlines.com/co/es/ofertas-vuelos?origin={orig}"
-            f"&inbound=null&outbound={flight_date}T12%3A00%3A00.000Z&destination={dest}"
-            f"&adt=1&chd=0&inf=0&trip=OW&cabin=Economy&redemption=false&sort=PRICE%2Casc"
-        )
-
-    if provider_id == "kiwi":
-        o_slug = orig_slug or orig.lower()
-        d_slug = dest_slug or dest.lower()
-        return f"https://www.kiwi.com/co/search/results/{o_slug}/{d_slug}/{flight_date}/no-return?sortBy=price"
-
     if provider_id == "kayak":
         return f"https://www.kayak.com.co/flights/{orig}-{dest}/{flight_date}?sort=price_a"
 
-    if provider_id == "jetsmart":
-        return (
-            f"https://jetsmart.com/co/es/booking/search?o1={orig}&d1={dest}"
-            f"&dd1={flight_date}&ADT=1&CHD=0&INF=0&currency=COP"
-        )
-
     if provider_id == "skyscanner":
         return f"https://www.skyscanner.com.co/transporte/vuelos/{orig.lower()}/{dest.lower()}/{yymmdd}/?adultsv2=1&cabinclass=economy"
-
-    if provider_id == "avianca":
-        return (
-            f"https://www.avianca.com/es/booking/select/?origin1={orig}"
-            f"&destination1={dest}&departure1={flight_date}&adt1=1&tng1=0&chd1=0&inf1=0&currency=COP"
-        )
-
-    if provider_id == "wingo":
-        return f"https://www.wingo.com/es/vuelos/{orig.lower()}-{dest.lower()}?date={flight_date}&adults=1&currency=COP"
 
     if provider_id == "booking":
         return (
@@ -793,7 +756,7 @@ def search_flights_for_date(
 
             if profile["direct_available"] and not is_lowcost_longhaul:
                 direct_factor = rng.uniform(0.96, 1.15)
-                if pid in ("jetsmart", "wingo", "google_flights", "rappitravel") and profile["lowcost_applicable"]:
+                if pid in ("jetsmart", "wingo", "google_flights") and profile["lowcost_applicable"]:
                     direct_factor *= 0.96
                 direct_price = round((base_cop * day_factor * direct_factor) / 1000) * 1000
                 airline_direct = (

@@ -277,61 +277,37 @@
     });
   });
 
-  // 4. Filtro de Portales / Buscadores (incluyendo Rappi Travel y aerolíneas)
+  // 4. Sitios: Google Flights (precios reales), Kayak, Skyscanner y Booking (abren la búsqueda
+  //    con la ruta precargada). Aerolíneas: solo filtran los resultados de Google y reservan en Google.
   var portalChips = document.querySelectorAll("[data-portal-filter]");
   var flightCards = document.querySelectorAll("[data-flight-card]");
+  var SITE_TEXT = { kayak: "Kayak", skyscanner: "Skyscanner", booking: "Booking" };
+  var SITE_ATTR = { kayak: "data-kayak-url", skyscanner: "data-sky-url", booking: "data-booking-url" };
+  var AIRLINES = ["latam", "jetsmart", "wingo", "avianca"];
 
   portalChips.forEach(function (chip) {
     chip.addEventListener("click", function () {
       var selected = chip.getAttribute("data-portal-filter") || "all";
-      portalChips.forEach(function (c) {
-        c.classList.toggle("active", c === chip);
-      });
+      portalChips.forEach(function (c) { c.classList.toggle("active", c === chip); });
 
       flightCards.forEach(function (card) {
         var airKey = card.getAttribute("data-airline-key") || "";
-        var mainBuyBtn = card.querySelector("[data-main-buy-btn]");
-        var providerLabel = card.querySelector("[data-provider-label]");
+        var btn = card.querySelector("[data-main-buy-btn]");
+        var label = card.querySelector("[data-provider-label]");
         var gfUrl = card.getAttribute("data-gf-booking");
-        var airUrl = card.getAttribute("data-airline-url");
-        var rappiUrl = card.getAttribute("data-rappi-url");
-        var skyUrl = card.getAttribute("data-sky-url");
-        var kayakUrl = card.getAttribute("data-kayak-url");
-
+        var baseText = (btn && btn.getAttribute("data-buy-label")) || "Comprar →";
         card.style.display = "";
+        var url = gfUrl, text = baseText, via = "Reserva directa · Google Flights";
 
-        if (selected === "all" || selected === "google_flights") {
-          if (mainBuyBtn && gfUrl) {
-            mainBuyBtn.href = gfUrl;
-            mainBuyBtn.textContent = "Comprar →";
-          }
-          if (providerLabel) providerLabel.textContent = "Reserva directa · Google Flights";
-        } else if (selected === "rappitravel") {
-          if (mainBuyBtn && rappiUrl) {
-            mainBuyBtn.href = rappiUrl;
-            mainBuyBtn.textContent = "Rappi Travel →";
-          }
-          if (providerLabel) providerLabel.textContent = "Vía Rappi Travel Colombia";
-        } else if (selected === "skyscanner") {
-          if (mainBuyBtn && skyUrl) {
-            mainBuyBtn.href = skyUrl;
-            mainBuyBtn.textContent = "Skyscanner →";
-          }
-          if (providerLabel) providerLabel.textContent = "Vía Skyscanner";
-        } else if (selected === "kayak") {
-          if (mainBuyBtn && kayakUrl) {
-            mainBuyBtn.href = kayakUrl;
-            mainBuyBtn.textContent = "Kayak →";
-          }
-          if (providerLabel) providerLabel.textContent = "Vía Kayak";
-        } else if (["latam", "jetsmart", "wingo", "avianca"].indexOf(selected) !== -1) {
-          if (airKey !== selected) {
-            card.style.display = "none";
-          } else if (mainBuyBtn && airUrl) {
-            mainBuyBtn.href = airUrl;
-            mainBuyBtn.textContent = "Web aerolínea →";
-          }
+        if (SITE_ATTR[selected] && card.getAttribute(SITE_ATTR[selected])) {
+          url = card.getAttribute(SITE_ATTR[selected]);
+          text = SITE_TEXT[selected] + " →";
+          via = "Vía " + SITE_TEXT[selected];
+        } else if (AIRLINES.indexOf(selected) !== -1 && airKey !== selected) {
+          card.style.display = "none";
         }
+        if (btn && url) { btn.href = url; btn.textContent = text; }
+        if (label) label.textContent = via;
       });
     });
   });

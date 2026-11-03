@@ -241,13 +241,18 @@ def get_email_provider() -> str:
     return "brevo" if _env("VUELOS_BREVO_API_KEY") else "smtp"
 
 
-def send_email(to_email: str, subject: str, plain_text: str, html_body: str) -> bool:
+def deliver_email(to_email: str, subject: str, plain_text: str, html_body: str) -> bool:
     """Punto único de envío: Brevo si está configurado, SMTP como respaldo."""
     if get_email_provider() == "brevo":
         if send_brevo_email(to_email, subject, plain_text, html_body):
             return True
         print("[BREVO] Intentando respaldo SMTP.", file=sys.stderr, flush=True)
     return send_smtp_email(to_email, subject, plain_text, html_body)
+
+
+# Alias de compatibilidad. Dentro de notify_lowest_price el parámetro send_email (bool)
+# lo ocultaría, por eso el código interno usa deliver_email.
+send_email = deliver_email
 
 
 def notify_lowest_price(
@@ -262,7 +267,7 @@ def notify_lowest_price(
     payload["subject"] = subject_prefix + payload["subject"]
     sent_ok = False
     if send_email:
-        sent_ok = send_email(
+        sent_ok = deliver_email(
             to_email=search_row["notify_email"],
             subject=payload["subject"],
             plain_text=payload["friendly_message"],
@@ -304,7 +309,7 @@ def send_test_email(to_email: str) -> bool:
         "flight_date": None, "deep_link": "https://www.google.com/travel/flights",
     }
     payload = build_friendly_email(sample_search, sample_offer, test_notice=TEST_EMAIL_NOTICE)
-    return send_email(
+    return deliver_email(
         to_email=to_email,
         subject="Prueba: correo de alertas de Vuelos Economicos",
         plain_text=payload["friendly_message"],

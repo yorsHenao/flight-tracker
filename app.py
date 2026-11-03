@@ -259,9 +259,47 @@ def _alert_airline(msg: str) -> str:
     return m.group(1).strip() if m else ""
 
 
+GUEST_SEARCH_LIMIT = 10          # búsquedas por hora por IP para invitados
+GUEST_SEARCH_WINDOW = 3600
+
+
+def _location_lists():
+    popular = list(dict.fromkeys(resolve_location(x)["label"] for x in list_popular_suggestions()))
+    popular_set = set(popular)
+    return popular, [x for x in list_all_location_labels() if x not in popular_set]
+
+
+def _guest_dashboard():
+    """Página de búsqueda para invitados: sin rutas, sin avisos, nada se guarda en la base de datos."""
+    preview = None
+    if session.get("guest_preview"):
+        preview = _build_preview(session["guest_preview"])
+        if preview is None:
+            session.pop("guest_preview", None)
+    suggestions, all_locations = _location_lists()
+    return render_template(
+        "index.html",
+        user=None,
+        is_admin=False,
+        preview=preview,
+        searches=[],
+        alerts=[],
+        active_count=0,
+        lowest_global=None,
+        default_date="",
+        default_date_iso="",
+        default_month="",
+        default_tracking_days=config.DEFAULT_TRACKING_DAYS,
+        guest_limit=GUEST_SEARCH_LIMIT,
+        suggestions=suggestions,
+        all_locations=all_locations,
+    )
+
+
 @app.route("/", methods=["GET"])
-@login_required
 def dashboard():
+    if not session.get("user_id"):
+        return _guest_dashboard()
     user_id = session["user_id"]
     user = get_user_by_id(user_id)
     if not user:
@@ -312,19 +350,22 @@ def dashboard():
     )
 
 
-def _validate_search_input(data) -> dict:
+def _validate_search_input(data, guest: bool = False) -> dict:
     """Valida y resuelve los datos de una ruta en el servidor (nunca confía en el cliente)."""
     origin_clean = validate_location(data.get("origin", ""), "Ciudad o país de salida")
     dest_clean = validate_location(data.get("destination", ""), "Ciudad o país de destino")
     travel_date, travel_month = validate_date_and_month(data.get("travel_date", ""), data.get("travel_month", ""))
     stop_filter = validate_stop_filter(data.get("stop_filter", "all"))
     tracking_days = validate_tracking_days(data.get("tracking_days", config.DEFAULT_TRACKING_DAYS))
-    account_user = get_user_by_id(session["user_id"]) or {}
-    # Los avisos van siempre al correo de la cuenta (no se acepta un correo ajeno del cliente)
-    notify_email = validate_email(
-        account_user.get("email", ""),
-        "Correo para recibir alertas",
-    )
+    if guest:
+        notify_email = None  # Los invitados no reciben avisos
+    else:
+        account_user = get_user_by_id(session["user_id"]) or {}
+        # Los avisos van siempre al correo de la cuenta (no se acepta un correo ajeno del cliente)
+        notify_email = validate_email(
+            account_user.get("email", ""),
+            "Correo para recibir alertas",
+        )
     target_price = validate_target_price(data.get("target_price", ""))
     orig = resolve_location(origin_clean)
     dest = resolve_location(dest_clean)
@@ -355,10 +396,11 @@ def _build_preview(p: dict) -> dict | None:
 
 
 @app.route("/searches/preview", methods=["POST"])
-@login_required
 @csrf_required
 def preview_search():
     client_ip = get_client_ip()
+    if not session.get("user_id"):
+        return _guest_preview_search(client_ip)
     if not rate_limiter.is_allowed(f"preview_search:{client_ip}", max_requests=25, window_seconds=60):
         flash("Demasiadas solicitudes seguidas. Espera unos segundos.", "error")
         return redirect(url_for("dashboard"))
@@ -374,6 +416,27 @@ def preview_search():
         "travel_date": v["travel_date"], "travel_month": v["travel_month"],
         "stop_filter": v["stop_filter"], "tracking_days": v["tracking_days"],
         "target_price": v["target_price"],
+    }
+    return redirect(url_for("dashboard") + "#vista-previa")
+
+
+def _guest_preview_search(client_ip: str):
+    """Búsqueda de invitado: precios reales en vivo, sin guardar en la base de datos ni enviar correos."""
+    if not rate_limiter.is_allowed(f"guest_search:{client_ip}", max_requests=GUEST_SEARCH_LIMIT,
+                                   window_seconds=GUEST_SEARCH_WINDOW):
+        flash(f"Llegaste al límite de {GUEST_SEARCH_LIMIT} búsquedas por hora como invitado. "
+              "Intenta más tarde o crea una cuenta.", "error")
+        return redirect(url_for("dashboard"))
+    try:
+        v = _validate_search_input(request.form, guest=True)
+    except (ValidationError, LocationNotFound) as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("dashboard"))
+    session["guest_preview"] = {
+        "origin_label": v["orig"]["label"], "origin_iata": v["orig"]["primary"],
+        "destination_label": v["dest"]["label"], "destination_iata": v["dest"]["primary"],
+        "travel_date": v["travel_date"], "travel_month": v["travel_month"],
+        "stop_filter": v["stop_filter"],
     }
     return redirect(url_for("dashboard") + "#vista-previa")
 
