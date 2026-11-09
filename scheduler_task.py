@@ -19,6 +19,7 @@ from database import (
     get_search_by_id,
     save_search_results,
     record_check_status,
+    offer_matches_tracked_date,
 )
 from notifier import notify_lowest_price
 from providers.flight_engine import (
@@ -36,9 +37,9 @@ def run_check_for_search(
     db_path: str | None = None,
 ) -> dict | None:
     """
-    Ejecuta la búsqueda completa (fecha elegida + calendario de todo el mes)
-    para una ruta específica consultando precios reales en vivo, guarda los
-    resultados (directos y con escalas) y dispara la alerta si encontró el precio más bajo.
+    Ejecuta la búsqueda completa (fecha elegida + calendario de todo el mes).
+    El calendario solo se muestra. La alerta, el enlace y el precio de referencia
+    salen de la fecha elegida (y de la vuelta, si el registro la tiene).
     """
     expire_due_searches(db_path)
     search_row = get_search_by_id(search_id, db_path=db_path)
@@ -90,6 +91,8 @@ def run_check_for_search(
     record_check_status(search_id, ok=True, db_path=db_path)
 
     best_overall = summary.get("best_overall")
+    if best_overall and not offer_matches_tracked_date(best_overall, search_row):
+        best_overall = None
     alert_created = None
 
     if best_overall:
