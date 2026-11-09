@@ -490,6 +490,29 @@ def delete_search(search_id: int, user_id: int, db_path: str | None = None) -> b
         conn.close()
 
 
+def tracked_flight_dates(search_row: dict | None) -> set[str]:
+    """Fechas que el usuario eligió vigilar. Hoy es la ida; la vuelta cuenta si el registro la trae."""
+    if not search_row:
+        return set()
+    dates: set[str] = set()
+    for key in ("travel_date", "return_date"):
+        raw = str(search_row.get(key) or "").strip()[:10]
+        if len(raw) == 10 and raw[4] == "-" and raw[7] == "-":
+            dates.add(raw)
+    return dates
+
+
+def offer_matches_tracked_date(offer: dict | None, search_row: dict | None) -> bool:
+    """True si la oferta es de una fecha vigilada. Sin fechas en el registro no restringe (avisos de prueba)."""
+    tracked = tracked_flight_dates(search_row)
+    if not tracked:
+        return True
+    if not offer:
+        return False
+    flight_date = str(offer.get("flight_date") or "").strip()[:10]
+    return flight_date in tracked
+
+
 def save_search_results(
     search_id: int,
     date_offers: list[dict],
@@ -503,23 +526,22 @@ def save_search_results(
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn = get_connection(db_path)
     try:
-        # El mejor precio de la búsqueda corresponde a la fecha elegida por el usuario
-        # (mientras que la tarjeta 4 muestra por separado la fecha más barata del mes).
-        if date_offers:
-            best_overall = min(date_offers, key=lambda x: x["price"])
-        elif monthly_offers:
-            best_overall = min(monthly_offers, key=lambda x: x["price"])
-        else:
-            best_overall = None
-        direct_candidates = [o for o in date_offers if o.get("is_direct")]
-        layover_candidates = [o for o in date_offers if not o.get("is_direct")]
+        # El calendario del mes solo informa. El precio vigilado, el enlace y la
+        # comparación salen de la fecha elegida (y de la vuelta, si existe).
+        # Si esa fecha no tiene tarifa, no se usa el día más barato del mes.
+        search_row = conn.execute("SELECT * FROM searches WHERE id = ?", (search_id,)).fetchone()
+        search_dict = dict(search_row) if search_row else {}
+        exact_offers = [o for o in date_offers if offer_matches_tracked_date(o, search_dict)]
+        best_overall = min(exact_offers, key=lambda x: x["price"]) if exact_offers else None
+        direct_candidates = [o for o in exact_offers if o.get("is_direct")]
+        layover_candidates = [o for o in exact_offers if not o.get("is_direct")]
 
         best_direct_price = min((o["price"] for o in direct_candidates), default=None)
         best_layover_price = min((o["price"] for o in layover_candidates), default=None)
 
         with conn:
             conn.execute("DELETE FROM offers WHERE search_id = ?", (search_id,))
-            for o in date_offers:
+            for o in exact_offers:
                 conn.execute(
                     """
                     INSERT INTO offers (

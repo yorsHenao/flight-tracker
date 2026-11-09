@@ -5,7 +5,7 @@ import smtplib
 import sys
 
 import config
-from database import create_alert
+from database import create_alert, offer_matches_tracked_date
 
 
 def format_cop(amount: float | None) -> str:
@@ -262,7 +262,9 @@ def notify_lowest_price(
     db_path: str | None = None,
     send_email: bool = True,
     subject_prefix: str = "",
-) -> dict:
+) -> dict | None:
+    if not offer_matches_tracked_date(best_offer, search_row):
+        return None
     payload = build_friendly_email(search_row, best_offer, previous_best)
     payload["subject"] = subject_prefix + payload["subject"]
     sent_ok = False

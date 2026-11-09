@@ -564,6 +564,32 @@ for _k, _city, _code, _alias in _CO_EXTRA:
     for _a in _alias:
         _CO_EXTRA_ALIASES[_a] = _k
 
+# Ciudades y puertas insulares de España. Madrid (MAD) y Barcelona (BCN) ya están arriba.
+_ES_EXTRA = [
+    ("valencia", "Valencia", "VLC", []),
+    ("sevilla", "Sevilla", "SVQ", ["seville"]),
+    ("malaga", "Málaga", "AGP", []),
+    ("alicante", "Alicante", "ALC", ["alicante elche"]),
+    ("bilbao", "Bilbao", "BIO", []),
+    ("palma", "Palma de Mallorca", "PMI", ["palma de mallorca", "mallorca"]),
+    ("ibiza", "Ibiza", "IBZ", ["eivissa"]),
+    ("menorca", "Menorca", "MAH", ["mahon"]),
+    ("tenerife", "Tenerife", "TFS", ["tenerife sur", "reina sofia"]),
+    ("tenerife norte", "Tenerife Norte", "TFN", ["los rodeos"]),
+    ("gran canaria", "Gran Canaria", "LPA", ["las palmas", "las palmas de gran canaria"]),
+    ("lanzarote", "Lanzarote", "ACE", ["arrecife"]),
+    ("fuerteventura", "Fuerteventura", "FUE", ["puerto del rosario"]),
+]
+_ES_EXTRA_ALIASES = {}
+for _k, _city, _code, _alias in _ES_EXTRA:
+    if _k not in LOCATIONS_DB:
+        LOCATIONS_DB[_k] = {
+            "primary": _code, "iatas": [_code], "label": f"{_city}, España ({_code})",
+            "city_slug": _k.replace(" ", "-") + "-spain", "country": "ES", "region": "EU",
+        }
+    for _a in _alias:
+        _ES_EXTRA_ALIASES[_a] = _k
+
 ALIASES = {
     "rionegro": "medellin", "jose maria cordova": "medellin", "aeropuerto jose maria cordova": "medellin",
     "bogota dc": "bogota", "bogota d.c.": "bogota", "eldorado": "bogota", "el dorado": "bogota",
@@ -573,6 +599,7 @@ ALIASES = {
     "cucuta norte de santander": "cucuta", "san jose de cucuta": "cucuta",
 }
 ALIASES.update(_CO_EXTRA_ALIASES)
+ALIASES.update(_ES_EXTRA_ALIASES)
 
 import re as _re
 
@@ -671,6 +698,18 @@ def list_popular_suggestions() -> list[str]:
         "Madrid",
         "España",
         "Barcelona",
+        "Valencia",
+        "Sevilla",
+        "Málaga",
+        "Alicante",
+        "Bilbao",
+        "Palma de Mallorca",
+        "Ibiza",
+        "Menorca",
+        "Tenerife",
+        "Gran Canaria",
+        "Lanzarote",
+        "Fuerteventura",
         "Miami",
         "Estados Unidos",
         "Orlando",
